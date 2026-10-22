@@ -550,13 +550,27 @@ def list_sites_of_interest() -> List[Dict[str, object]]:
                 )
             """)
             for row in cur.fetchall():
+                dyn_fs = float(row[2]) if row[2] is not None else 1.25
+                static_fs = float(row[1]) if row[1] is not None else 1.0
+                fail_prob = float(row[4]) if row[4] is not None else float(1.0 / (1.0 + math.exp(6.8 * (dyn_fs - 1.0)))) * 100.0
+                triggers = row[6].split(",") if row[6] else []
+                # Ensure alert level is strictly determined by the actual dynamic risk factor, not static FS
+                if dyn_fs < 1.0 and len(triggers) >= 1:
+                    computed_alert = "RED"
+                elif dyn_fs < 1.0 or len(triggers) >= 2:
+                    computed_alert = "ORANGE"
+                elif dyn_fs < 1.25 or len(triggers) >= 1:
+                    computed_alert = "YELLOW"
+                else:
+                    computed_alert = "GREEN"
+
                 calc_map[row[0]] = {
-                    "static_fs": row[1],
-                    "dynamic_fs": row[2],
-                    "calibrated_fs": row[3],
-                    "failure_prob_pct": row[4],
-                    "alert_level": row[5],
-                    "active_triggers": row[6].split(",") if row[6] else [],
+                    "static_fs": static_fs,
+                    "dynamic_fs": dyn_fs,
+                    "calibrated_fs": dyn_fs,
+                    "failure_prob_pct": fail_prob,
+                    "alert_level": computed_alert,
+                    "active_triggers": triggers,
                     "last_refresh_utc": row[7],
                 }
             conn.close()

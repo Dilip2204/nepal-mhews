@@ -234,11 +234,11 @@
 
           <!-- Alert Legend (Bottom-Left overlay) -->
           <div class="absolute bottom-3 left-3 bg-[var(--card)]/90 backdrop-blur border border-[var(--border)] rounded-lg px-2.5 py-1.5 text-[11px] flex flex-wrap items-center gap-3 z-[1000]">
-            <span class="font-bold">Legend:</span>
-            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>Safe (FS &ge; 1.25)</span>
-            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-yellow-500"></span>Watch (1.0–1.25)</span>
-            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-orange-500"></span>Warning</span>
-            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>Critical (FS &lt; 1.0)</span>
+            <span class="font-bold flex items-center gap-1"><span class="text-xs">🎯</span> Dynamic Risk Factor:</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>Safe (Risk &lt; 15% • Dynamic FS &ge; 1.25)</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-yellow-500"></span>Watch (Risk 15–35% • Dynamic FS 1.10–1.25)</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-orange-500"></span>Warning (Risk 35–50% • Dynamic FS 1.0–1.10)</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>Critical (Risk &gt; 50% • Dynamic FS &lt; 1.0)</span>
           </div>
         </div>
 
@@ -577,6 +577,82 @@
       }
     }
 
+    // ==========================================
+    // ACTUAL DYNAMIC RISK FACTOR COLOR CALCULATION
+    // ==========================================
+    // CRITICAL: Evaluates dot colour based strictly on the current actual calculated dynamic risk factor
+    // (dynamic FS, failure probability %, and active precursor triggers), NEVER on the static risk factor.
+    function getSiteActualRisk(st) {
+      const phys = (st && st.physics) ? st.physics : {};
+      
+      let dynFs = (phys.dynamic_fs !== undefined && phys.dynamic_fs !== null) 
+        ? Number(phys.dynamic_fs) 
+        : (phys.calibrated_fs !== undefined ? Number(phys.calibrated_fs) : 1.25);
+        
+      let failProb = (phys.failure_prob_pct !== undefined && phys.failure_prob_pct !== null)
+        ? Number(phys.failure_prob_pct)
+        : (1.0 / (1.0 + Math.exp(6.8 * (dynFs - 1.0)))) * 100.0;
+        
+      const triggers = Array.isArray(phys.active_triggers) ? phys.active_triggers : [];
+      const triggerCount = triggers.length;
+      
+      // Determine level based on actual current live calculation:
+      // 1. Critical Failure Risk: Dynamic FS < 1.0 with active trigger, or severe instability FS < 0.98, or Risk >= 50%
+      if ((dynFs < 1.0 && triggerCount >= 1) || dynFs < 0.98 || failProb >= 50.0) {
+        return {
+          level: "RED",
+          fillColor: "#f43f5e",
+          borderColor: "#e11d48",
+          glowColor: "rgba(244, 63, 94, 0.7)",
+          icon: "🔴",
+          label: "Critical (High Risk)",
+          riskPct: failProb,
+          dynFs: dynFs,
+          triggers: triggers,
+        };
+      }
+      // 2. Elevated Warning Risk: Dynamic FS < 1.08 OR 2+ active triggers OR Risk >= 35%
+      if (dynFs < 1.08 || triggerCount >= 2 || failProb >= 35.0) {
+        return {
+          level: "ORANGE",
+          fillColor: "#f97316",
+          borderColor: "#ea580c",
+          glowColor: "rgba(249, 115, 22, 0.6)",
+          icon: "🟠",
+          label: "Warning (Elevated Risk)",
+          riskPct: failProb,
+          dynFs: dynFs,
+          triggers: triggers,
+        };
+      }
+      // 3. Moderate Watch Risk: Dynamic FS < 1.25 OR 1 active trigger OR Risk >= 15%
+      if (dynFs < 1.25 || triggerCount >= 1 || failProb >= 15.0) {
+        return {
+          level: "YELLOW",
+          fillColor: "#f59e0b",
+          borderColor: "#d97706",
+          glowColor: "rgba(245, 158, 11, 0.5)",
+          icon: "🟡",
+          label: "Watch (Moderate Risk)",
+          riskPct: failProb,
+          dynFs: dynFs,
+          triggers: triggers,
+        };
+      }
+      // 4. Safe & Stable: Dynamic FS >= 1.25, 0 danger triggers, Low Failure Probability (<15%)
+      return {
+        level: "GREEN",
+        fillColor: "#10b981",
+        borderColor: "#059669",
+        glowColor: "rgba(16, 185, 129, 0.5)",
+        icon: "🟢",
+        label: "Safe & Stable",
+        riskPct: failProb,
+        dynFs: dynFs,
+        triggers: triggers,
+      };
+    }
+
     function renderLeafletMarkers() {
       if (!leafletMap || !markersLayerGroup) return;
       markersLayerGroup.clearLayers();
@@ -586,38 +662,30 @@
 
       sitesToDraw.forEach(st => {
         const isSelected = st.site_id === state.selectedSiteId;
-        const alert = (st.physics && st.physics.alert_level) || "GREEN";
-
-        let fillColor = "#10b981"; // Safe Green
-        let borderColor = "#059669";
-        if (alert === "RED") {
-          fillColor = "#f43f5e";
-          borderColor = "#e11d48";
-        } else if (alert === "ORANGE") {
-          fillColor = "#f97316";
-          borderColor = "#ea580c";
-        } else if (alert === "YELLOW") {
-          fillColor = "#f59e0b";
-          borderColor = "#d97706";
-        }
+        const riskInfo = getSiteActualRisk(st);
 
         const radius = isSelected ? 9 : 5;
         const marker = L.circleMarker([st.latitude, st.longitude], {
           radius: radius,
-          fillColor: fillColor,
-          color: isSelected ? "#ffffff" : borderColor,
+          fillColor: riskInfo.fillColor,
+          color: isSelected ? "#ffffff" : riskInfo.borderColor,
           weight: isSelected ? 3 : 1.5,
           opacity: 1,
-          fillOpacity: 0.85,
+          fillOpacity: 0.88,
         });
 
-        // Tooltip on Hover
-        const fs = (st.physics && st.physics.calibrated_fs) ? st.physics.calibrated_fs.toFixed(2) : "1.25";
+        // Tooltip on Hover showing actual calculated dynamic risk factor vs static susceptibility
+        const staticFsStr = (st.physics && st.physics.static_fs !== undefined && st.physics.static_fs !== null) 
+          ? Number(st.physics.static_fs).toFixed(2) 
+          : "N/A";
+
         marker.bindTooltip(`
-          <div class="font-sans">
-            <strong class="text-sky-300">${st.name}</strong><br/>
-            <span>Elev: ${st.elevation_m}m • Slope: ${st.slope_deg}°</span><br/>
-            <span>Alert: <strong style="color:${fillColor}">${alert}</strong> (FS: ${fs})</span>
+          <div class="font-sans text-xs">
+            <strong class="text-sky-300 font-semibold">${st.name}</strong><br/>
+            <span class="text-gray-300">Elev: ${st.elevation_m}m • Slope: ${st.slope_deg}°</span><br/>
+            <span>Actual Risk Factor: <strong style="color:${riskInfo.fillColor}">${riskInfo.riskPct.toFixed(1)}% Risk</strong> (${riskInfo.level})</span><br/>
+            <span>Live Dynamic FS: <strong style="color:${riskInfo.fillColor}">${riskInfo.dynFs.toFixed(2)}</strong></span>
+            <span class="text-[10px] text-gray-400 block pt-0.5">Static Susceptibility FS: ${staticFsStr}</span>
           </div>
         `, { direction: "top", offset: [0, -5] });
 
@@ -819,18 +887,14 @@
         siteScreenCoords.push({ st, x, y });
 
         const isSelected = st.site_id === state.selectedSiteId;
-        const alert = (st.physics && st.physics.alert_level) || "GREEN";
-        let color = "#10b981";
-        if (alert === "RED") color = "#f43f5e";
-        else if (alert === "ORANGE") color = "#f97316";
-        else if (alert === "YELLOW") color = "#f59e0b";
+        const riskInfo = getSiteActualRisk(st);
 
         const pointRadius = isSelected ? (8 * mapTransform.zoom) : Math.max(3, 3.5 * Math.min(mapTransform.zoom, 2.0));
         topoCtx.beginPath();
         topoCtx.arc(x, y, pointRadius, 0, Math.PI * 2);
-        topoCtx.fillStyle = color;
+        topoCtx.fillStyle = riskInfo.fillColor;
         topoCtx.fill();
-        topoCtx.strokeStyle = "#ffffff";
+        topoCtx.strokeStyle = isSelected ? "#ffffff" : riskInfo.borderColor;
         topoCtx.lineWidth = isSelected ? 2.5 : 1;
         topoCtx.stroke();
       });
@@ -903,9 +967,8 @@
       filtered.forEach(s => {
         const opt = document.createElement("option");
         opt.value = s.site_id;
-        const alert = (s.physics && s.physics.alert_level) || "GREEN";
-        const icon = alert === "RED" ? "🔴" : alert === "ORANGE" ? "🟠" : alert === "YELLOW" ? "🟡" : "🟢";
-        opt.textContent = `${icon} ${s.name} (${s.elevation_m}m)`;
+        const riskInfo = getSiteActualRisk(s);
+        opt.textContent = `${riskInfo.icon} ${s.name} (${s.elevation_m}m) — ${riskInfo.dynFs.toFixed(2)} FS [${riskInfo.riskPct.toFixed(0)}% Risk]`;
         if (s.site_id === state.selectedSiteId) opt.selected = true;
         sel.appendChild(opt);
       });
@@ -952,6 +1015,22 @@
         const data = await res.json();
         state.currentSiteReport = data;
         renderSiteReport(data);
+
+        // Synchronize site in state.sites with latest dynamic calculation so the map dot immediately updates
+        const idx = state.sites.findIndex(s => s.site_id === siteId);
+        if (idx !== -1 && data.risk_evaluation) {
+          state.sites[idx].physics = {
+            dynamic_fs: data.risk_evaluation.dynamic_fs,
+            static_fs: data.risk_evaluation.static_fs,
+            calibrated_fs: data.risk_evaluation.dynamic_fs,
+            failure_prob_pct: data.risk_evaluation.failure_probability_pct,
+            alert_level: data.risk_evaluation.alert_level,
+            active_triggers: data.risk_evaluation.active_triggers,
+            last_refresh_utc: data.report_generated_at_utc || (Date.now() / 1000)
+          };
+          renderLeafletMarkers();
+          drawNepalTopographyMap();
+        }
       } catch (err) {
         console.error("Failed to fetch site report:", err);
       }
@@ -1291,6 +1370,23 @@
           const data = await res.json();
           state.currentSiteReport = data;
           renderSiteReport(data);
+
+          // Synchronize state.sites and re-render markers immediately
+          const idx = state.sites.findIndex(s => s.site_id === state.selectedSiteId);
+          if (idx !== -1 && data.risk_evaluation) {
+            state.sites[idx].physics = {
+              dynamic_fs: data.risk_evaluation.dynamic_fs,
+              static_fs: data.risk_evaluation.static_fs,
+              calibrated_fs: data.risk_evaluation.dynamic_fs,
+              failure_prob_pct: data.risk_evaluation.failure_probability_pct,
+              alert_level: data.risk_evaluation.alert_level,
+              active_triggers: data.risk_evaluation.active_triggers,
+              last_refresh_utc: data.report_generated_at_utc || (Date.now() / 1000)
+            };
+            renderLeafletMarkers();
+            drawNepalTopographyMap();
+            populateSiteSelector();
+          }
           await updateEngineStatus();
         } catch (err) {
           console.error("Recalculate failed:", err);
