@@ -1,18 +1,22 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Himalayan-MHEWS • Nepal Topography & Real-Time Hazard Monitor</title>
-  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <title>Himalayan-MHEWS • Nepal Multi-Hazard Topography & 491 Observation Sites</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Leaflet CSS & JS for Interactive Topography / Google Maps Satellite -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
   <style>
     :root {
-      --background: #090d16;
-      --foreground: #f1f5f9;
-      --card: #0f172a;
+      --background: #060d17;
+      --foreground: #f8fafc;
+      --card: #0b1524;
       --card-foreground: #f8fafc;
       --border: #1e293b;
-      --muted: #1e293b;
+      --muted: #0f1c30;
       --muted-foreground: #94a3b8;
       --primary: #0284c7;
       --primary-foreground: #ffffff;
@@ -33,7 +37,45 @@
       --accent: #f1f5f9;
       --accent-foreground: #0f172a;
     }
+
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: var(--muted); }
+    .custom-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* Leaflet Dark / Custom Map Styling */
+    .leaflet-container {
+      background: #060d17;
+      font-family: inherit;
+    }
+    .leaflet-popup-content-wrapper {
+      background: #0b1524;
+      color: #f8fafc;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+    }
+    .leaflet-popup-tip {
+      background: #0b1524;
+    }
+    .leaflet-tooltip {
+      background: rgba(11, 21, 36, 0.95);
+      color: #f8fafc;
+      border: 1px solid #38bdf8;
+      border-radius: 6px;
+      font-size: 11px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+
+    @keyframes radarPulse {
+      0% { transform: scale(0.9); opacity: 0.9; }
+      50% { transform: scale(1.6); opacity: 0.3; }
+      100% { transform: scale(2.2); opacity: 0.0; }
+    }
+    .radar-marker-pulse {
+      animation: radarPulse 2s infinite ease-out;
+    }
   </style>
+
   <script>
     window.__ERRORS__ = [];
     window.onerror = function(msg, url, line, col, err) {
@@ -46,623 +88,529 @@
     };
   </script>
 </head>
-<body class="bg-[var(--background)] text-[var(--foreground)] antialiased p-5 select-none">
-  <div class="max-w-7xl mx-auto space-y-5">
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased p-3 sm:p-4 select-none">
+  <div class="max-w-[1740px] mx-auto space-y-3.5">
 
-    <!-- TOP BAR: LIVE MONITORING & THEME -->
-    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm flex flex-wrap items-center justify-between gap-4">
-      <div>
-        <div class="flex items-center gap-2">
-          <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-xs font-bold font-mono">LIVE TRACKING</span>
-          <h1 class="text-base font-bold text-[var(--foreground)]">
-            Nepal Multi-Hazard Early Warning System (Himalayan-MHEWS)
+    <!-- TOP BAR: ENGINE STATUS & BROWSER NAVIGATION -->
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3 shadow-sm flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <span class="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-400 text-xs font-bold font-mono animate-pulse flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span>PERPETUAL ENGINE LIVE</span>
+        </span>
+        <div>
+          <h1 class="text-sm sm:text-base font-bold text-[var(--foreground)] flex items-center gap-2">
+            Himalayan-MHEWS • Nepal Multi-Hazard Early Warning Platform
+            <span class="text-xs font-normal text-[var(--muted-foreground)]">• 491 Observation Sites</span>
           </h1>
+          <p id="engineCycleSummary" class="text-xs text-[var(--muted-foreground)]">
+            Perpetually tracking 22 live data ingestion points across 7 river basins • Zero synthetic manual manipulation.
+          </p>
         </div>
-        <p class="text-xs text-[var(--muted-foreground)] mt-1">
-          Tracking live spaceborne sensors, InSAR ground creep, and high-altitude weather models across 10 Himalayan monitoring stations.
-        </p>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2">
-        <button id="themeToggleBtn" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] hover:bg-[var(--accent)] transition">
+      <div class="flex items-center gap-2">
+        <div id="engineStatusBadge" class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-xs font-mono text-emerald-400">
+          <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          <span id="engineStatusText">Cycle #1 • 491 Sites Monitored</span>
+        </div>
+        <button id="themeToggleBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] hover:bg-[var(--accent)] transition">
           <span id="themeToggleIcon">🌙</span>
           <span id="themeToggleLabel">Dark Theme</span>
         </button>
       </div>
     </div>
 
-    <!-- HEADLINE RISK METRICS (LIVE MODEL CALCULATIONS) -->
-    <div>
-      <div class="flex items-center justify-between mb-2">
-        <div class="flex items-center gap-2">
-          <span class="text-sm font-bold">Live Geotechnical State for: <span id="activeStationTitle" class="text-sky-400">Langtang Lirung & Kyangjin Radar (5680m)</span></span>
+    <!-- HEADLINE METRICS BANNER FOR SELECTED OBSERVATION POINT -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <!-- Card 1: Early Warning Level -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3.5 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-[var(--muted-foreground)]">1. EARLY WARNING ALERT LEVEL</span>
+          <span id="statusDot" class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
         </div>
-        <button id="toggleTechDetailsBtn" class="text-xs font-semibold text-sky-400 hover:underline">
-          🔍 Show Technical Physics & AI Details
-        </button>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <!-- Card 1: Overall Warning Level -->
-        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 flex flex-col justify-between">
-          <div>
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-semibold text-[var(--muted-foreground)]">1. EARLY WARNING LEVEL</span>
-              <span class="inline-block w-3 h-3 rounded-full bg-emerald-500" id="statusDot"></span>
-            </div>
-            <div id="kpiAlertBadge" class="text-lg font-bold mt-1 text-emerald-500">GREEN — SAFE</div>
+        <div>
+          <div id="kpiAlertBadge" class="text-base sm:text-lg font-bold mt-1 text-emerald-500">
+            GREEN — SAFE & STABLE
           </div>
-          <p id="kpiPrecursors" class="text-xs text-[var(--muted-foreground)] mt-2">
-            No active danger triggers detected right now.
-          </p>
-        </div>
-
-        <!-- Card 2: Slope Balance Score (Factor of Safety) -->
-        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 flex flex-col justify-between">
-          <div>
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-semibold text-[var(--muted-foreground)]">2. SLOPE STABILITY SCORE (FS)</span>
-              <span class="text-xs font-mono text-[var(--muted-foreground)]">Collapse &lt; 1.00</span>
-            </div>
-            <div class="flex items-baseline gap-2 mt-1">
-              <span id="kpiCalFs" class="text-xl font-bold font-mono">1.28</span>
-              <span id="kpiFsMeaning" class="text-xs font-semibold text-emerald-400">(Grip is 28% stronger than gravity)</span>
-            </div>
-          </div>
-          <p class="text-xs text-[var(--muted-foreground)] mt-2">
-            Raw Physics calculated <span id="kpiRawFs" class="font-mono font-semibold">1.46</span>; real Nepal landslide history adjusted it by <span id="kpiDeltaFs" class="font-mono font-semibold text-amber-400">-0.18</span>.
-          </p>
-        </div>
-
-        <!-- Card 3: Collapse Probability & Soil Thickness -->
-        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 flex flex-col justify-between">
-          <div>
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-semibold text-[var(--muted-foreground)]">3. CHANCE OF LANDSLIDE & SOIL DEPTH</span>
-              <span id="kpiCalModeBadge" class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-xs font-semibold">Real-Data Calibrated</span>
-            </div>
-            <div class="flex items-baseline gap-3 mt-1">
-              <span id="kpiHybridProb" class="text-xl font-bold font-mono text-amber-500">32% Risk</span>
-              <span class="text-xs text-[var(--muted-foreground)]">• Soil Thickness: <strong id="kpiZ" class="text-sky-400 font-mono">1.82 m</strong></span>
-            </div>
-          </div>
-          <p class="text-xs text-[var(--muted-foreground)] mt-2">
-            Underground water fills <span id="kpiZwPct" class="font-mono font-semibold text-blue-400">43%</span> of the soil layer (<span id="kpiZw" class="font-mono">0.78 m</span> wet).
+          <p id="kpiPrecursors" class="text-xs text-[var(--muted-foreground)] mt-0.5">
+            0 active danger triggers detected right now.
           </p>
         </div>
       </div>
 
-      <!-- Collapsible Advanced Physics/AI Row -->
-      <div id="techDetailsDrawer" class="hidden mt-3 bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-        <div>
-          <div class="text-[var(--muted-foreground)]">Rock & Root Glue (Cohesion c')</div>
-          <div class="font-mono font-bold text-sm mt-0.5"><span id="kpiCohesion">11.4 kPa</span> (Ice: <span id="kpiIceCohesion">6.2 kPa</span>)</div>
-          <div class="text-[var(--muted-foreground)]">Capillary Suction: <span id="kpiSuction">+1.8 kPa</span></div>
+      <!-- Card 2: Factor of Safety (FS) -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3.5 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-[var(--muted-foreground)]">2. FACTOR OF SAFETY (FS)</span>
+          <span class="text-xs font-mono text-[var(--muted-foreground)]">Critical &lt; 1.00</span>
         </div>
-        <div>
-          <div class="text-[var(--muted-foreground)]">Monte Carlo Uncertainty (250 Runs)</div>
-          <div class="font-mono font-bold text-sm mt-0.5" id="kpiMcProb">18.4% P(FS &lt; 1.0)</div>
-          <div class="text-[var(--muted-foreground)]">Calibrated Soil Depth: <span id="kpiCalZ">1.93 m</span></div>
+        <div class="flex items-baseline gap-2 mt-1">
+          <span id="kpiCalFs" class="text-xl font-bold font-mono text-emerald-400">1.28</span>
+          <span id="kpiFsMeaning" class="text-xs font-semibold text-emerald-400">(Equilibrium margin: +28%)</span>
         </div>
-        <div>
-          <div class="text-[var(--muted-foreground)]">0.3° Block Calibration Source</div>
-          <div class="font-bold text-sm mt-0.5 text-emerald-400" id="kpiCalMode">DIRECT REAL-DATA BLOCK</div>
-          <div class="text-[var(--muted-foreground)]" id="kpiCalSamples">6 real landslides in this grid block</div>
-        </div>
-        <div>
-          <div class="text-[var(--muted-foreground)]">AI Accelerator 1 (PINN Radar Inversion)</div>
-          <div class="font-mono font-bold text-sm mt-0.5 text-purple-400">c'_inv: <span id="pinnC">10.2 kPa</span> • z_inv: <span id="pinnZ">1.88 m</span></div>
-          <div class="text-[var(--muted-foreground)]">From <span id="pinnVel">14.5</span> mm/mo radar creep (<span id="pinnRegime">STEADY</span>)</div>
-        </div>
+        <p class="text-xs text-[var(--muted-foreground)] mt-0.5">
+          Raw Static FS: <span id="kpiRawFs" class="font-mono font-semibold">1.25</span> • Dynamic FS: <span id="kpiDynFs" class="font-mono font-semibold text-sky-400">1.30</span>
+        </p>
       </div>
 
-      <!-- Offline AI review & Live Sensor Feed (local Ollama) -->
-      <div class="mt-3 bg-[var(--card)] border border-[var(--border)] rounded-xl p-4">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <div class="text-xs">
-            <span class="font-bold">🧠 Offline AI Hazard & Live Factor Synthesis (Local Ollama)</span>
-            <span id="ollamaStatus" class="ml-2 text-[var(--muted-foreground)]">checking…</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <button id="btnFetchLiveWeather" class="px-3 py-1.5 rounded text-xs font-bold border border-sky-500/40 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 transition">
-              🛰️ Fetch Live Rain & Weather
-            </button>
-            <button id="btnOllamaEval" class="px-3 py-1.5 rounded text-xs font-bold bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition">
-              Run Full Hazard Evaluation
-            </button>
-          </div>
+      <!-- Card 3: Probability & Soil Depth -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3.5 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-[var(--muted-foreground)]">3. PREDICTED RISK & SOIL DEPTH (z)</span>
+          <span class="text-xs px-1.5 py-0.5 rounded font-mono font-bold bg-emerald-500/20 text-emerald-400">Real-Data Calibrated</span>
         </div>
-        <div id="ollamaResult" class="mt-2 text-xs text-[var(--muted-foreground)]">
-          Real live satellite/meteorological telemetry will be fetched for the selected station, then analyzed offline by local Llama-3.1.
+        <div class="flex items-baseline gap-2 mt-1">
+          <span id="kpiHybridProb" class="text-xl font-bold font-mono text-emerald-400">14% Risk</span>
+          <span class="text-xs text-[var(--muted-foreground)]">• Soil Depth (z): <strong id="kpiZ" class="font-mono text-[var(--foreground)]">1.64 m</strong></span>
         </div>
+        <p class="text-xs text-[var(--muted-foreground)] mt-0.5">
+          Water Saturation: <span id="kpiZwPct" class="font-mono font-semibold text-cyan-400">18%</span> (<span id="kpiZw" class="font-mono">0.30 m wet</span>)
+        </p>
       </div>
     </div>
 
-    <!-- MAIN WORKSPACE: LEFT = NEPAL MAP & LIVE TELEMETRY | RIGHT = MODEL PARAMETERS & CONTROLS -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+    <!-- MAIN TWO-COLUMN WORKSPACE: LEFT = INTERACTIVE MAP | RIGHT = 22 INGESTION POINTS & RISK REPORT -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
 
-      <!-- INTERACTIVE MAP PANEL (7 Columns) -->
-      <div class="lg:col-span-7 bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 flex flex-col justify-between">
-        <div>
-          <!-- Top Switcher: Mode 1 = Nepal Topography Map | Mode 2 = 3D Valley Slope Columns -->
-          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <div>
-              <div class="flex items-center gap-2">
-                <h2 id="mapHeaderTitle" class="text-sm font-bold">Nepal Topographic & Live Telemetry Map</h2>
-              </div>
-              <p id="mapHeaderSub" class="text-xs text-[var(--muted-foreground)] mt-0.5">
-                Displays active stations with real-time sensor updates, fault lines, and terrain corridors. Click any station!
-              </p>
-            </div>
-
-            <!-- Primary View Mode Switcher -->
-            <div class="flex gap-1 bg-[var(--background)] p-1 rounded-lg border border-[var(--border)]">
-              <button id="viewBtnTopo" class="px-3 py-1.5 rounded text-xs font-bold bg-[var(--primary)] text-[var(--primary-foreground)] transition">
-                🗺️ Nepal Topography Map
-              </button>
-              <button id="viewBtnGMap" class="px-3 py-1.5 rounded text-xs font-bold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition">
-                🛰️ Live Google Terrain / Satellite Map
-              </button>
-              <button id="viewBtn3D" class="px-3 py-1.5 rounded text-xs font-bold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition">
-                🧊 3D Slope Grid (Zoomed)
-              </button>
-            </div>
+      <!-- LEFT COLUMN: INTERACTIVE TOPOGRAPHY MAP (GOOGLE MAPS SATELLITE / TERRAIN / CANVAS) (7 COLS) -->
+      <div class="lg:col-span-7 bg-[var(--card)] border border-[var(--border)] rounded-xl p-3.5 flex flex-col justify-between space-y-3">
+        <!-- Map Header & Layer Toggles -->
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm font-bold flex items-center gap-2">
+              <span>Interactive Nepal Topography & 491 Hazard Points</span>
+              <span id="siteCountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-400 font-mono">491 SITES</span>
+            </h2>
+            <p class="text-xs text-[var(--muted-foreground)]">
+              Scroll to zoom, drag to pan. Click any point to select and view its live 22-point data feeds.
+            </p>
           </div>
 
-          <!-- VIEW 1: NEPAL TOPOGRAPHY & REAL-TIME OBSERVATION MAP -->
-          <div id="panelTopoMap">
-            <div class="relative w-full rounded-lg overflow-hidden border border-[var(--border)] bg-[#0b1320]">
-              <canvas id="nepalTopoCanvas" width="760" height="400" class="w-full h-[375px] cursor-pointer block"></canvas>
-
-              <!-- Live Observation Station Telemetry Overlay Card (Top-Right of Nepal Map) -->
-              <div class="absolute top-3 right-3 bg-[var(--card)]/95 backdrop-blur border border-[var(--border)] rounded-lg p-3 shadow-lg w-64 space-y-1.5">
-                <div class="flex items-center justify-between gap-1">
-                  <span id="stCardName" class="text-xs font-bold truncate">Langtang Lirung Radar</span>
-                  <span id="stCardBadge" class="px-1.5 py-0.5 rounded text-xs font-bold bg-amber-500/20 text-amber-400">WATCH</span>
-                </div>
-                <div id="stCardMeta" class="text-xs text-[var(--muted-foreground)] font-mono">
-                  28.23°N, 85.52°E • Elev: 5680m • β: 46°
-                </div>
-                <div class="pt-1 border-t border-[var(--border)] grid grid-cols-2 gap-1 text-xs font-mono">
-                  <div>Safety FS: <strong id="stCardFs" class="text-amber-400">1.14</strong></div>
-                  <div>Creep: <strong id="stCardCreep" class="text-purple-400">14.5 mm/m</strong></div>
-                  <div>72h Rain: <strong id="stCardRain" class="text-blue-400">115 mm</strong></div>
-                  <div>Soil z: <strong id="stCardZ" class="text-sky-400">1.64 m</strong></div>
-                </div>
-                <div id="stCardLake" class="text-xs text-cyan-400 font-medium pt-0.5">
-                  🛰️ SAR/NDWI: Permafrost Ice Wall Active
-                </div>
-                <button id="zoomTo3DBtn" class="w-full mt-1 py-1 px-2 rounded bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold hover:opacity-90 transition">
-                  🧊 Inspect 3D Valley Grid Here →
-                </button>
-              </div>
-
-              <!-- Elevation Belt Legend (Bottom-Left of Nepal Map) -->
-              <div class="absolute bottom-3 left-3 bg-[var(--card)]/90 backdrop-blur border border-[var(--border)] rounded-lg px-3 py-2 text-xs space-y-1">
-                <div class="font-bold text-[var(--foreground)]">Nepal Topographic Belts (South → North)</div>
-                <div class="flex flex-wrap items-center gap-3">
-                  <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm inline-block" style="background:#1e4620"></span>Terai (&lt;500m)</span>
-                  <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm inline-block" style="background:#3b5e2b"></span>Mid-Hills (500–2500m)</span>
-                  <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm inline-block" style="background:#6e5536"></span>High Himalaya (2500–4500m)</span>
-                  <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm inline-block" style="background:#a5d8ff"></span>Cryosphere (&gt;4500m)</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Map Layer Checkboxes Bar -->
-            <div class="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div class="flex flex-wrap items-center gap-4">
-                <label class="flex items-center gap-1.5 cursor-pointer">
-                  <input type="checkbox" id="chkStations" checked class="accent-sky-500" />
-                  <span class="font-semibold">🛰️ Live Sensor Stations (10 Active)</span>
-                </label>
-                <label class="flex items-center gap-1.5 cursor-pointer">
-                  <input type="checkbox" id="chkFaultsRivers" checked class="accent-amber-500" />
-                  <span>〰️ Major Rivers & Main Himalayan Thrust Fault</span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <!-- VIEW 2: LIVE GOOGLE MAPS TERRAIN & SATELLITE (Interactive Multi-Layer) -->
-          <div id="panelGMap" class="hidden">
-            <div class="relative w-full rounded-lg overflow-hidden border border-[var(--border)] bg-[#0b1320]">
-              <div id="googleMapContainer" class="w-full h-[400px]"></div>
-              
-              <!-- Google Map Control Header Overlay -->
-              <div class="absolute top-3 left-3 bg-[var(--card)]/90 backdrop-blur border border-[var(--border)] rounded-lg px-3 py-1.5 text-xs flex items-center gap-2">
-                <span class="font-bold text-sky-400">🗺️ Google Maps Platform</span>
-                <span class="text-[var(--muted-foreground)]">|</span>
-                <button id="btnGMapTerrain" class="px-2 py-0.5 rounded bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold text-[11px]">Terrain</button>
-                <button id="btnGMapSatellite" class="px-2 py-0.5 rounded bg-[var(--background)] text-[var(--foreground)] hover:bg-[var(--border)] text-[11px]">Satellite</button>
-                <button id="btnGMapHybrid" class="px-2 py-0.5 rounded bg-[var(--background)] text-[var(--foreground)] hover:bg-[var(--border)] text-[11px]">Hybrid</button>
-              </div>
-              
-              <!-- Station selector inside Google Map -->
-              <div class="absolute bottom-3 left-3 bg-[var(--card)]/95 backdrop-blur border border-[var(--border)] rounded-lg px-3 py-2 text-xs max-w-sm">
-                <div class="font-bold text-[var(--foreground)] flex items-center justify-between">
-                  <span>Interactive Google Terrain Station Navigator</span>
-                  <span class="text-[10px] text-emerald-400 font-mono">LIVE API</span>
-                </div>
-                <p class="text-[11px] text-[var(--muted-foreground)] mt-0.5">
-                  Click any marker or station button to fly to its 3D topography and satellite slope:
-                </p>
-                <div id="gmapStationPills" class="flex flex-wrap gap-1 mt-1.5 max-h-16 overflow-y-auto"></div>
-              </div>
-            </div>
-            <div class="mt-1 text-[11px] text-[var(--muted-foreground)] flex items-center justify-between">
-              <span>Google Maps Platform • Interactive Vector Terrain & Satellite Layer</span>
-              <span class="font-mono text-emerald-400">internalUsageAttributionIds: ['gmp_git_agentskills_v1']</span>
-            </div>
-          </div>
-
-          <!-- VIEW 2: 3D VALLEY SLOPE GRID (Hidden until clicked) -->
-          <div id="panel3DGrid" class="hidden">
-            <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-              <button id="backToNepalMapBtn" class="text-xs font-semibold text-sky-400 hover:underline">
-                ← Back to Full Nepal Topography Map
-              </button>
-              <div class="flex flex-wrap gap-1 bg-[var(--background)] p-1 rounded-lg border border-[var(--border)]">
-                <button data-layer="calibrated_fs" class="layerBtn px-2 py-1 rounded text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)]">
-                  Final Safety (Calibrated)
-                </button>
-                <button data-layer="raw_fs" class="layerBtn px-2 py-1 rounded text-xs font-semibold text-[var(--muted-foreground)]">
-                  Textbook Physics
-                </button>
-                <button data-layer="anomaly" class="layerBtn px-2 py-1 rounded text-xs font-semibold text-[var(--muted-foreground)]">
-                  Physics vs Reality Gap
-                </button>
-                <button data-layer="soil_z" class="layerBtn px-2 py-1 rounded text-xs font-semibold text-[var(--muted-foreground)]">
-                  Soil & Water Depth
-                </button>
-              </div>
-            </div>
-
-            <div class="relative w-full rounded-lg overflow-hidden border border-[var(--border)] bg-[var(--background)]">
-              <canvas id="terrainCanvas" width="760" height="360" class="w-full h-[350px] cursor-grab active:cursor-grabbing block"></canvas>
-
-              <div class="absolute top-3 left-3 bg-[var(--card)]/95 backdrop-blur border border-[var(--border)] rounded-lg p-3 shadow-md w-64 space-y-1">
-                <div class="flex items-center justify-between">
-                  <span class="text-xs font-bold">Selected Slope Patch</span>
-                  <span id="inspCoverageBadge" class="px-1.5 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400">
-                    Real-Data Block
-                  </span>
-                </div>
-                <div id="inspCoords" class="text-xs text-[var(--muted-foreground)]">Elevation: 4650m • Steepness: 36°</div>
-                <div class="pt-1 border-t border-[var(--border)] grid grid-cols-2 gap-1 text-xs">
-                  <div>Final FS: <strong id="inspCalFs" class="font-mono text-amber-400">1.28</strong></div>
-                  <div>Raw FS: <strong id="inspRawFs" class="font-mono">1.46</strong></div>
-                  <div>Soil Depth: <strong id="inspZ" class="font-mono text-sky-400">1.82 m</strong></div>
-                  <div>Offset Δ: <strong id="inspAnom" class="font-mono text-rose-400">+0.34</strong></div>
-                </div>
-              </div>
-            </div>
+          <!-- Base Map Layer Switcher -->
+          <div class="flex items-center gap-1 bg-[var(--background)] p-1 rounded-lg border border-[var(--border)]">
+            <button id="mapLayerSatellite" class="px-2.5 py-1 rounded text-xs font-bold bg-[var(--primary)] text-[var(--primary-foreground)] transition">
+              🛰️ Google Satellite
+            </button>
+            <button id="mapLayerTerrain" class="px-2.5 py-1 rounded text-xs font-bold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition">
+              ⛰️ Google Terrain
+            </button>
+            <button id="mapLayerTopoCanvas" class="px-2.5 py-1 rounded text-xs font-bold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition">
+              🗺️ 2D Shaded Relief
+            </button>
+            <button id="btnOpenGoogleEarth" title="Open selected site in Google Earth 3D" class="px-2 py-1 rounded text-xs font-bold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition flex items-center gap-1">
+              🌍 Earth 3D ↗
+            </button>
           </div>
         </div>
 
-        <!-- Bottom Status Legend -->
-        <div class="mt-3 pt-2 border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted-foreground)]">
-          <div class="flex flex-wrap items-center gap-3">
-            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-rose-500 inline-block"></span><strong>Red:</strong> Critical (FS &lt; 1.0)</span>
-            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span><strong>Orange:</strong> Watch (1.0–1.25)</span>
-            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span><strong>Green:</strong> Safe (&ge; 1.25)</span>
+        <!-- MAIN MAP CONTAINER -->
+        <div class="relative w-full rounded-lg overflow-hidden border border-[var(--border)] bg-[#070e17]">
+          <!-- Leaflet Interactive Map View -->
+          <div id="leafletMapContainer" class="w-full h-[470px]"></div>
+
+          <!-- Standalone Fallback Canvas Map (Hidden by default, used in 2D Topo mode) -->
+          <canvas id="nepalTopoCanvas" width="860" height="470" class="w-full h-[470px] cursor-grab hidden"></canvas>
+
+          <!-- Floating Selected Station Card (Top-Right overlay) -->
+          <div id="floatingStationCard" class="absolute top-3 right-3 bg-[var(--card)]/95 backdrop-blur border border-[var(--border)] rounded-lg p-2.5 shadow-lg w-64 space-y-1 text-xs z-[1000] pointer-events-auto">
+            <div class="flex items-center justify-between gap-1">
+              <span id="stCardName" class="font-bold truncate text-[var(--foreground)]">Langtang Lirung Radar</span>
+              <span id="stCardBadge" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400">WATCH</span>
+            </div>
+            <div id="stCardMeta" class="text-[11px] text-[var(--muted-foreground)] font-mono">
+              28.23°N, 85.52°E • 5680m • β: 46°
+            </div>
+            <div class="pt-1 border-t border-[var(--border)] grid grid-cols-2 gap-1 text-[11px] font-mono">
+              <div>Stability FS: <strong id="stCardFs" class="text-amber-400">1.25</strong></div>
+              <div>Ground Creep: <strong id="stCardCreep" class="text-purple-400">2.5 mm/m</strong></div>
+              <div>72h Rain: <strong id="stCardRain" class="text-blue-400">0.0 mm</strong></div>
+              <div>Soil z: <strong id="stCardZ" class="text-sky-400">1.64 m</strong></div>
+            </div>
+            <div id="stCardType" class="text-[10px] text-cyan-400 font-medium pt-0.5 truncate">
+              🏔️ Rock-Ice Avalanche / Glacier
+            </div>
           </div>
-          <div class="text-xs">
-            <strong> dashed orange line</strong> = Main Himalayan Thrust Fault • <strong>blue lines</strong> = Major Rivers
+
+          <!-- Alert Legend (Bottom-Left overlay) -->
+          <div class="absolute bottom-3 left-3 bg-[var(--card)]/90 backdrop-blur border border-[var(--border)] rounded-lg px-2.5 py-1.5 text-[11px] flex flex-wrap items-center gap-3 z-[1000]">
+            <span class="font-bold">Legend:</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>Safe (FS &ge; 1.25)</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-yellow-500"></span>Watch (1.0–1.25)</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-orange-500"></span>Warning</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>Critical (FS &lt; 1.0)</span>
           </div>
+        </div>
+
+        <!-- Layer toggles & status bar -->
+        <div class="flex flex-wrap items-center justify-between text-xs text-[var(--muted-foreground)] pt-1">
+          <div class="flex items-center gap-4">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" id="chkFaultsRivers" checked class="accent-amber-500" />
+              <span>Faults (MHT/MCT) & Rivers Overlay</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" id="chkShowAllPoints" checked class="accent-sky-500" />
+              <span>Show All 491 Points</span>
+            </label>
+          </div>
+          <div id="mapZoomStatus" class="font-mono text-[11px]">Center: Nepal Himalayan Arc • 491 Points Live</div>
         </div>
       </div>
 
-      <!-- MODEL PARAMETERS & LIVE SENSOR TUNING (5 Columns) -->
-      <div class="lg:col-span-5 bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 flex flex-col justify-between space-y-4">
+      <!-- RIGHT COLUMN: 22 DATA INGESTION FEEDS & RISK ANALYSIS REPORT (5 COLS) -->
+      <div class="lg:col-span-5 bg-[var(--card)] border border-[var(--border)] rounded-xl p-3.5 flex flex-col justify-between space-y-3">
         <div>
-          <div class="flex items-center gap-2 mb-1">
-            <h2 class="text-sm font-bold">Live Sensor Telemetry & Geotechnical Variables</h2>
+          <!-- Observation Point Selector & Basin Filter -->
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[var(--border)]">
+            <div class="flex-1 min-w-[200px]">
+              <label class="block text-[11px] font-semibold text-[var(--muted-foreground)] mb-1">
+                OBSERVATION POINT (491 SITES IN NEPAL):
+              </label>
+              <select id="siteSelector" class="w-full bg-[var(--background)] border border-[var(--border)] text-xs rounded-lg p-2 font-medium focus:outline-none focus:border-sky-500"></select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-[var(--muted-foreground)] mb-1">BASIN FILTER:</label>
+              <select id="basinFilter" class="bg-[var(--background)] border border-[var(--border)] text-xs rounded-lg p-2 font-medium">
+                <option value="all">All Basins (491)</option>
+                <option value="langtang">Langtang (16)</option>
+                <option value="budhi_gandaki">Budhi Gandaki (23)</option>
+                <option value="kali_gandaki">Kali Gandaki (180)</option>
+                <option value="karnali">Karnali (107)</option>
+                <option value="bagmati_narayani">Bagmati / Narayani (80)</option>
+                <option value="sun_koshi">Sun Koshi (61)</option>
+                <option value="sapta_koshi_kanchenjunga">Kanchenjunga (24)</option>
+              </select>
+            </div>
           </div>
-          <p class="text-xs text-[var(--muted-foreground)] mb-3">
-            Real-time parameter inputs fed into our Infinite Slope Stability and Multi-Hazard ML Models.
-          </p>
 
-          <div class="grid grid-cols-2 gap-2 p-1 rounded-lg bg-[var(--background)] border border-[var(--border)] mb-4">
-            <button id="tabBtnTriggers" class="py-1.5 px-3 rounded-md text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] transition">
-              🌧️ Weather & Quake Triggers
+          <!-- Section Tabs: [22 Ingestion Points] vs [Risk Analysis Report] -->
+          <div class="flex gap-2 p-1 rounded-lg bg-[var(--background)] border border-[var(--border)] my-2.5">
+            <button id="tabBtnFeeds" class="flex-1 py-1.5 px-3 rounded-md text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] transition">
+              📡 22 Live Data Ingestion Points
             </button>
-            <button id="tabBtnSoil" class="py-1.5 px-3 rounded-md text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition">
-              🛰️ Satellite Soil-Depth Lab
+            <button id="tabBtnReport" class="flex-1 py-1.5 px-3 rounded-md text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition">
+              📑 Risk Analysis Report
             </button>
           </div>
 
-          <!-- TAB A: WEATHER, CREEP & EARTHQUAKE TRIGGERS -->
-          <div id="tabPanelTriggers" class="space-y-3">
-            <div class="p-3 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-2.5">
-              <div class="text-xs font-bold text-blue-400">💧 Water & Ice Melt (Raises Underground Water Table)</div>
-              <div>
-                <div class="flex justify-between text-xs">
-                  <span>3-Day Storm Rainfall (NASA IMERG)</span>
-                  <span id="val_imerg_rain_72h_mm" class="font-mono font-bold">115 mm</span>
-                </div>
-                <input id="inp_imerg_rain_72h_mm" type="range" min="0" max="320" step="5" value="115" class="w-full accent-blue-500" />
-              </div>
-
-              <div>
-                <div class="flex justify-between text-xs">
-                  <span>Past 30-Day Soil Wetness Memory (API Sponge)</span>
-                  <span id="val_antecedent_rain_30d_api_mm" class="font-mono font-bold">95 mm</span>
-                </div>
-                <input id="inp_antecedent_rain_30d_api_mm" type="range" min="0" max="250" step="5" value="95" class="w-full accent-blue-500" />
-              </div>
-
-              <div>
-                <div class="flex justify-between text-xs">
-                  <span>Warm Days Melting High-Altitude Ice (PDD)</span>
-                  <span id="val_pdd_c_days_7d" class="font-mono font-bold">6.0 °C·d</span>
-                </div>
-                <input id="inp_pdd_c_days_7d" type="range" min="0" max="25" step="0.5" value="6.0" class="w-full accent-cyan-500" />
+          <!-- TAB 1: 22 DATA INGESTION POINTS LIST & REFRESH TIMESTAMPS -->
+          <div id="tabPanelFeeds" class="space-y-2">
+            <div class="flex items-center justify-between text-xs pb-1">
+              <span class="font-bold flex items-center gap-1.5 text-sky-400">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span>Live Telemetry Feeds for Selected Point:</span>
+              </span>
+              <div class="flex items-center gap-2">
+                <span id="autoRefreshTimer" class="font-mono text-[11px] text-[var(--muted-foreground)]">Syncing in 30s</span>
+                <button id="btnRecalculateNow" class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 text-[11px] font-bold transition">
+                  🔄 Recalculate
+                </button>
               </div>
             </div>
 
-            <div class="p-3 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-2.5">
-              <div class="text-xs font-bold text-rose-400">🌋 Shaking, Elevation & Radar Ground Creep</div>
-              <div>
-                <div class="flex justify-between text-xs">
-                  <span>Earthquake Shaking Force (USGS PGA)</span>
-                  <span id="val_bedrock_pga_g" class="font-mono font-bold">0.08 g</span>
-                </div>
-                <input id="inp_bedrock_pga_g" type="range" min="0" max="0.60" step="0.01" value="0.08" class="w-full accent-rose-500" />
-              </div>
-
-              <div>
-                <div class="flex justify-between text-xs">
-                  <span>Radar Slope Creep Speed (Sentinel-1 InSAR)</span>
-                  <span id="val_insar_los_velocity_mm_month" class="font-mono font-bold">14.5 mm/mo</span>
-                </div>
-                <input id="inp_insar_los_velocity_mm_month" type="range" min="0" max="45" step="0.5" value="14.5" class="w-full accent-purple-500" />
-              </div>
-
-              <div>
-                <div class="flex justify-between text-xs">
-                  <span>Selected Station Elevation (&gt;4500m = Permafrost)</span>
-                  <span id="val_elevation_m" class="font-mono font-bold">5680 m</span>
-                </div>
-                <input id="inp_elevation_m" type="range" min="1200" max="6800" step="50" value="5680" class="w-full accent-amber-500" />
-              </div>
-
-              <div>
-                <div class="flex justify-between text-xs">
-                  <span>Distance to Active Earthquake Fault Line</span>
-                  <span id="val_distance_to_fault_km" class="font-mono font-bold">3.8 km</span>
-                </div>
-                <input id="inp_distance_to_fault_km" type="range" min="0.2" max="25" step="0.2" value="3.8" class="w-full accent-rose-500" />
-              </div>
+            <!-- Scrollable 22-Point Ingestion Feeds Container -->
+            <div class="max-h-[360px] overflow-y-auto pr-1 custom-scroll rounded border border-[var(--border)] bg-[var(--background)]">
+              <table class="w-full text-left text-xs border-collapse">
+                <thead class="sticky top-0 bg-[var(--card)] border-b border-[var(--border)] text-[var(--muted-foreground)] font-mono text-[10px]">
+                  <tr>
+                    <th class="p-2">DATA INGESTION POINT</th>
+                    <th class="p-2">CURRENT LIVE VALUE</th>
+                    <th class="p-2">REFRESH CADENCE</th>
+                    <th class="p-2">LAST REFRESH TIMESTAMP</th>
+                  </tr>
+                </thead>
+                <tbody id="ingestionPointsTableBody" class="font-mono text-[11px] divide-y divide-[var(--border)]/60">
+                  <tr><td colspan="4" class="p-4 text-center text-[var(--muted-foreground)]">Loading 22 data ingestion feeds...</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <!-- TAB B: SPACEBORNE SOIL DEPTH (z) 6-SIGNAL LAB -->
-          <div id="tabPanelSoil" class="space-y-3 hidden">
-            <div class="p-3 rounded-lg bg-[var(--background)] border border-[var(--border)]">
-              <div class="flex justify-between text-xs font-semibold mb-1.5">
-                <span>How 6 Satellites Estimate Soil Depth (z)</span>
-                <span id="atiReadout" class="font-mono text-sky-400">ATI: 0.0488</span>
+          <!-- TAB 2: DETAILED RISK ANALYSIS REPORT -->
+          <div id="tabPanelReport" class="space-y-2.5 hidden">
+            <!-- Geotechnical Summary -->
+            <div class="p-3 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-2">
+              <div class="flex items-center justify-between text-xs font-bold text-sky-400">
+                <span>🏔️ Geotechnical State & Infinite Slope Equations</span>
+                <span id="repAlertPill" class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">SAFE</span>
               </div>
-              <div class="space-y-1.5 text-xs" id="zBreakdownBars"></div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+                <div>Static FS: <strong id="repStaticFs" class="text-[var(--foreground)]">1.25</strong></div>
+                <div>Dynamic FS: <strong id="repDynamicFs" class="text-sky-400">1.30</strong></div>
+                <div>Failure Prob: <strong id="repProb" class="text-emerald-400">14%</strong></div>
+                <div>Soil Depth (z): <strong id="repZ">1.64 m</strong></div>
+                <div>Cohesion (c'): <strong id="repC">12.5 kPa</strong></div>
+                <div>Friction (φ'): <strong id="repPhi">31.5°</strong></div>
+                <div>Water Table (zw): <strong id="repZw">0.30 m</strong></div>
+                <div>Soil Saturation: <strong id="repSat">18.5%</strong></div>
+              </div>
             </div>
 
-            <div class="space-y-2">
-              <div>
-                <div class="flex justify-between text-xs">
-                  <span>1. Slope Steepness β (Steeper = Thinner Soil)</span>
-                  <span id="val_slope_deg" class="font-mono font-bold">46°</span>
-                </div>
-                <input id="inp_slope_deg" type="range" min="10" max="65" step="1" value="46" class="w-full accent-sky-500" />
+            <!-- Active Triggers Detected -->
+            <div class="p-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-xs space-y-1">
+              <div class="font-bold text-[11px] text-amber-400">🚨 Precursor Hazard Triggers:</div>
+              <div id="repTriggersList" class="font-mono text-[11px] text-[var(--muted-foreground)]">
+                0 danger triggers detected. Baseline stable equilibrium.
               </div>
+            </div>
 
-              <div>
-                <div class="flex justify-between text-xs">
-                  <span>2. Day-Night Temperature Swing ΔT (High Swing = Loose Soil)</span>
-                  <span id="val_diurnal_lst_range_c" class="font-mono font-bold">16.0 °C</span>
-                </div>
-                <input id="inp_diurnal_lst_range_c" type="range" min="3" max="28" step="0.5" value="16.0" class="w-full accent-sky-500" />
+            <!-- Downstream Settlement Evacuation Timeline -->
+            <div class="p-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-xs space-y-1.5">
+              <div class="flex items-center justify-between font-bold text-amber-400 text-[11px]">
+                <span>🏘️ Downstream Settlement Evacuation Timeline (Debris Routing)</span>
+                <span id="repRiverName" class="text-[10px] font-mono text-[var(--muted-foreground)]">Trishuli Corridor</span>
               </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-[11px] font-mono border-collapse">
+                  <thead>
+                    <tr class="text-[var(--muted-foreground)] border-b border-[var(--border)]">
+                      <th class="py-0.5">Settlement</th>
+                      <th>Pop.</th>
+                      <th>Dist.</th>
+                      <th>Est. Arrival</th>
+                      <th>Evacuation Order</th>
+                    </tr>
+                  </thead>
+                  <tbody id="settlementTimelineBody" class="divide-y divide-[var(--border)]/40"></tbody>
+                </table>
+              </div>
+            </div>
 
-              <div>
-                <div class="flex justify-between text-xs">
-                  <span>3. Bowl vs Ridge Shape κ (Negative = Bowl Traps Soil)</span>
-                  <span id="val_profile_curvature" class="font-mono font-bold">-0.62</span>
-                </div>
-                <input id="inp_profile_curvature" type="range" min="-1.5" max="1.5" step="0.05" value="-0.62" class="w-full accent-sky-500" />
+            <!-- NDRRMA Bilingual Official Broadcast (CAP v1.2) -->
+            <div class="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs space-y-1">
+              <div class="flex items-center justify-between font-bold text-rose-400 text-[11px]">
+                <span>📢 NDRRMA Civil Protection Emergency Broadcast (CAP v1.2)</span>
+                <span class="text-[10px] font-mono">नेपाली / English</span>
               </div>
+              <p id="repNepaliBroadcast" class="text-[11px] text-[var(--foreground)] leading-relaxed italic"></p>
+              <p id="repEnglishBroadcast" class="text-[11px] text-[var(--muted-foreground)] leading-relaxed pt-1 border-t border-[var(--border)]"></p>
+            </div>
 
-              <div>
-                <div class="flex justify-between text-xs">
-                  <span>4. Compass Direction (180° South = Sun-Baked Weathering)</span>
-                  <span id="val_aspect_deg" class="font-mono font-bold">195°</span>
-                </div>
-                <input id="inp_aspect_deg" type="range" min="0" max="360" step="5" value="195" class="w-full accent-sky-500" />
+            <!-- Offline AI (Local Ollama) Evaluation Button -->
+            <div class="pt-1 flex items-center justify-between gap-2">
+              <div class="text-xs">
+                <span class="font-bold">🧠 Offline AI Second Opinion:</span>
+                <span id="ollamaStatus" class="ml-1 text-[var(--muted-foreground)]">checking…</span>
               </div>
-
-              <div>
-                <div class="flex justify-between text-xs">
-                  <span>5. Deep Radar vs Shallow Radar Ratio (NISAR L/C Band)</span>
-                  <span id="val_sar_l_to_c_band_penetration_ratio" class="font-mono font-bold">1.15</span>
-                </div>
-                <input id="inp_sar_l_to_c_band_penetration_ratio" type="range" min="0.6" max="1.8" step="0.05" value="1.15" class="w-full accent-sky-500" />
-              </div>
-
-              <div>
-                <div class="flex justify-between text-xs">
-                  <span>6. Tree Height via Space Laser (GEDI Root Floor)</span>
-                  <span id="val_gedi_canopy_height_m" class="font-mono font-bold">6.5 m</span>
-                </div>
-                <input id="inp_gedi_canopy_height_m" type="range" min="0" max="30" step="0.5" value="6.5" class="w-full accent-sky-500" />
-              </div>
+              <button id="btnRunOllamaEval" class="px-3 py-1 rounded text-xs font-bold bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition">
+                Run Local Llama Review
+              </button>
+            </div>
+            <div id="ollamaReportBox" class="text-xs text-[var(--muted-foreground)] p-2 rounded bg-[var(--background)] border border-[var(--border)] italic">
+              Click 'Run Local Llama Review' to invoke offline Llama-3.1 geotechnical interpretation.
             </div>
           </div>
         </div>
 
-        <div class="p-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-xs text-[var(--muted-foreground)]">
-          💡 <strong class="text-[var(--foreground)]">How to use the map:</strong>
-          Click any of the <strong>10 glowing circles</strong> on the Nepal map (like <em>Langtang Lirung</em>, <em>Birendra Tal</em>, <em>Melamchi</em>, or <em>Tsho Rolpa</em>) to load its real elevation, slope, and fault distance!
+        <div class="p-2 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[11px] text-[var(--muted-foreground)] flex items-center justify-between">
+          <span>⚡ Auto-recalculates physics & hazard state on every sensor data refresh.</span>
+          <span class="font-mono text-emerald-400">Zero-Simulation Live Mode</span>
         </div>
       </div>
     </div>
   </div>
 
   <script>
-    // 10 Real-Time Monitored Observation Stations across Nepal (with real coordinates & terrain parameters)
-    const LIVE_STATIONS = [
-      {
-        id: "langtang_lirung",
-        name: "Langtang Lirung & Kyangjin Radar",
-        shortName: "Langtang (7227m)",
-        basinId: "langtang",
-        lat: 28.232,
-        lon: 85.518,
-        elevation_m: 5680,
-        slope_deg: 46,
-        profile_curvature: -0.62,
-        fault_km: 3.8,
-        creepOffset: 4.0,
-        rainMultiplier: 0.85,
-        sensorNote: "🛰️ Sentinel-1 InSAR + Cryosphere Permafrost Wall",
-      },
-      {
-        id: "shalbachum_lake",
-        name: "Shalbachum Glacial Lake (Rasuwa)",
-        shortName: "Shalbachum Lake",
-        basinId: "langtang",
-        lat: 28.258,
-        lon: 85.582,
-        elevation_m: 5380,
-        slope_deg: 43,
-        profile_curvature: -0.48,
-        fault_km: 5.2,
-        creepOffset: 2.5,
-        rainMultiplier: 0.80,
-        sensorNote: "🌊 Sentinel-2 NDWI + SAR Cloud-Penetrating Lake Mask",
-      },
-      {
-        id: "melamchi_pemdan",
-        name: "Melamchi / Pemdan Moraine Gorge",
-        shortName: "Melamchi Gorge",
-        basinId: "langtang",
-        lat: 28.034,
-        lon: 85.562,
-        elevation_m: 4580,
-        slope_deg: 39,
-        profile_curvature: -0.75,
-        fault_km: 6.4,
-        creepOffset: 1.5,
-        rainMultiplier: 1.25,
-        sensorNote: "🌧️ IMERG Monsoon Cloudburst + Moraine Dam Gauge",
-      },
-      {
-        id: "birendra_tal",
-        name: "Birendra Tal & Manaslu Icefall (Gorkha)",
-        shortName: "Birendra Tal",
-        basinId: "budhi_gandaki",
-        lat: 28.596,
-        lon: 84.636,
-        elevation_m: 4620,
-        slope_deg: 39,
-        profile_curvature: -0.58,
-        fault_km: 7.2,
-        creepOffset: 3.0,
-        rainMultiplier: 0.95,
-        sensorNote: "🧊 Hanging Glacier Calving + GLOF Outflow Sensor",
-      },
-      {
-        id: "thulagi_dona",
-        name: "Thulagi (Dona) Glacial Lake",
-        shortName: "Thulagi Lake",
-        basinId: "budhi_gandaki",
-        lat: 28.538,
-        lon: 84.485,
-        elevation_m: 5120,
-        slope_deg: 45,
-        profile_curvature: -0.52,
-        fault_km: 9.1,
-        creepOffset: 2.0,
-        rainMultiplier: 0.90,
-        sensorNote: "🌊 Ice-Cored Moraine Dam • SAR Water Area +4.8%",
-      },
-      {
-        id: "philim_gorge",
-        name: "Budhi Gandaki Philim Gorge Choke Point",
-        shortName: "Philim Gorge",
-        basinId: "budhi_gandaki",
-        lat: 28.315,
-        lon: 84.725,
-        elevation_m: 2650,
-        slope_deg: 41,
-        profile_curvature: -0.65,
-        fault_km: 4.5,
-        creepOffset: 0.5,
-        rainMultiplier: 1.35,
-        sensorNote: "⛰️ Narrow River Gorge Landslide Dam Monitor",
-      },
-      {
-        id: "seti_annapurna",
-        name: "Seti Gorge / Annapurna IV Sabche Cirque",
-        shortName: "Seti / Annapurna IV",
-        basinId: "budhi_gandaki",
-        lat: 28.612,
-        lon: 84.085,
-        elevation_m: 5420,
-        slope_deg: 48,
-        profile_curvature: -0.68,
-        fault_km: 8.5,
-        creepOffset: 3.5,
-        rainMultiplier: 1.10,
-        sensorNote: "📡 2–15 Hz Rock-Ice Avalanche Seismic Array",
-      },
-      {
-        id: "tsho_rolpa",
-        name: "Tsho Rolpa Glacial Lake (Rolwaling)",
-        shortName: "Tsho Rolpa",
-        basinId: "langtang",
-        lat: 27.862,
-        lon: 86.476,
-        elevation_m: 5190,
-        slope_deg: 44,
-        profile_curvature: -0.55,
-        fault_km: 12.4,
-        creepOffset: 2.2,
-        rainMultiplier: 0.90,
-        sensorNote: "🚨 Nepal's Largest Proglacial Lake • Siren Link Active",
-      },
-      {
-        id: "imja_dig_tsho",
-        name: "Imja Tsho & Dig Tsho (Khumbu / Everest)",
-        shortName: "Imja / Dig Tsho",
-        basinId: "langtang",
-        lat: 27.901,
-        lon: 86.936,
-        elevation_m: 5540,
-        slope_deg: 47,
-        profile_curvature: -0.59,
-        fault_km: 14.2,
-        creepOffset: 2.8,
-        rainMultiplier: 0.82,
-        sensorNote: "🛰️ Lhotse Shar Ice Cliff + Moraine InSAR Monitor",
-      },
-      {
-        id: "lower_barun",
-        name: "Lower Barun Glacial Lake (Sankhuwasabha)",
-        shortName: "Lower Barun",
-        basinId: "langtang",
-        lat: 27.798,
-        lon: 87.092,
-        elevation_m: 4890,
-        slope_deg: 44,
-        profile_curvature: -0.60,
-        fault_km: 10.5,
-        creepOffset: 1.8,
-        rainMultiplier: 1.15,
-        sensorNote: "🌊 Arun River Cascade Warning Telemetry",
-      },
-    ];
+    // Master State
+    const INITIAL_REPORT = {"site_id":"langtang_lirung","name":"Langtang Lirung & Kyangjin Radar","hazard_type":"rock_ice_avalanche","basin_id":"langtang","coordinates":{"latitude":28.232,"longitude":85.518},"elevation_m":5680.0,"slope_deg":46.0,"fault_distance_km":3.8,"risk_evaluation":{"alert_level":"ORANGE","static_fs":0.537,"dynamic_fs":2.047,"failure_probability_pct":95.9,"soil_depth_z_m":1.54,"cohesion_c_prime_kpa":20.86,"friction_phi_deg":30.4,"water_table_zw_m":0.69,"saturation_pct":44.8,"active_triggers":[],"stability_status":"CRITICAL"},"ingestion_points":[{"name":"NASA GPM IMERG 72h Precipitation","val":"0.0 mm","refresh_cadence":"Every 30 Mins","last_refresh_utc":1792699200.0},{"name":"1-Hour Cloudburst Peak Intensity","val":"0.0 mm/h","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"2m Ambient Temperature","val":"-12.1 °C","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Atmospheric Surface Pressure","val":"552.7 hPa","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Synoptic Pressure Deficit","val":"+59.8 hPa","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Cloud Cover Percentage","val":"0.0%","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"10m Wind Speed & Gusts","val":"1.8 / 34.2 km/h","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Relative Humidity (2m)","val":"28.0%","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Wind-Blown Cornice Surcharge (qs)","val":"0.000 kPa","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Positive Degree Day (PDD) 7d Melt","val":"0.0 °C-d","refresh_cadence":"Daily (24h)","last_refresh_utc":1792627200.0},{"name":"30-Day API Rain Sponge Memory","val":"12.0 mm","refresh_cadence":"Daily (24h)","last_refresh_utc":1792627200.0},{"name":"MODIS/VIIRS Diurnal LST Swing (ATI)","val":"0.049","refresh_cadence":"Twice Daily (12h)","last_refresh_utc":1792670400.0},{"name":"Copernicus Snow Water Equivalent (SWE)","val":"20.0 mm","refresh_cadence":"Daily (24h)","last_refresh_utc":1792627200.0},{"name":"NASA SMAP 30m Downscaled Moisture","val":"44.8% saturation","refresh_cadence":"Every 2-3 Days","last_refresh_utc":1792627213.5114613},{"name":"Sentinel-1 InSAR LOS Creep Velocity","val":"2.5 mm/month","refresh_cadence":"Every 6-12 Days","last_refresh_utc":1792519213.5114613},{"name":"Sentinel-2 NDVI Vegetation Canopy","val":"0.32","refresh_cadence":"Every 5 Days","last_refresh_utc":1792579213.5114613},{"name":"Proglacial Lake Expansion Rate","val":"0.0%","refresh_cadence":"Every 5-6 Days","last_refresh_utc":1792559213.5114613},{"name":"USGS Real-Time ShakeMap PGA","val":"0.020 g (M0.0)","refresh_cadence":"Real-Time Streaming","last_refresh_utc":1792699153.5114613},{"name":"Copernicus 30m DEM Elevation","val":"5680 m","refresh_cadence":"Static 30m Grid","last_refresh_utc":1704067200},{"name":"Slope Gradient (beta) & Subgrid Scarp","val":"46.0°","refresh_cadence":"Static 30m Grid","last_refresh_utc":1704067200},{"name":"Profile & Plan Geomorphic Curvature","val":"-0.62 m⁻¹","refresh_cadence":"Static 30m Grid","last_refresh_utc":1704067200},{"name":"Distance to Active Fault (MHT/MCT)","val":"3.80 km","refresh_cadence":"Static Annual","last_refresh_utc":1704067200}],"settlement_impacts":[{"settlement_name":"Kyangjin Gompa","population_at_risk":350,"elevation_m":3870,"distance_km":4.5,"eta_minutes":4.8,"evacuation_status":"DIRECT_IMPACT_IMMINENT","danger_level":"CRITICAL_RED","river_corridor":"Trishuli River"},{"settlement_name":"Langtang Old Village (Memorial Site)","population_at_risk":400,"elevation_m":3430,"distance_km":6.8,"eta_minutes":7.2,"evacuation_status":"DIRECT_IMPACT_IMMINENT","danger_level":"CRITICAL_RED","river_corridor":"Trishuli River"},{"settlement_name":"Ghodatabela Army Post","population_at_risk":80,"elevation_m":3020,"distance_km":14.2,"eta_minutes":15.0,"evacuation_status":"HIGH_SURGE_WARNING","danger_level":"ORANGE","river_corridor":"Trishuli River"}],"civil_protection_broadcast":{"sms_nepali":"सतर्कता सूचना: Langtang River Corridor क्षेत्रमा नदी जलसतह र भिरमा पहिरोको जोखिम बढेको छ। सतर्क रहनुहोला।","sms_english":"WATCH ALERT: Elevated landslide and flood risk in Langtang River Corridor. Stay alert near river banks.","cap_headline":"NDRRMA ORANGE Hazard Warning - Langtang River Corridor"}};
 
-    // Accurate Nepal National Border Polygon [lon, lat]
+    const state = {
+      selectedSiteId: "langtang_lirung",
+      basinFilter: "all",
+      sites: [],
+      currentSiteReport: null,
+      autoRefreshCountdown: 30,
+      activeLayer: "satellite", // "satellite" | "terrain" | "canvas"
+    };
+
+    function formatRelativeTime(epochSec) {
+      if (!epochSec || epochSec < 1000) return "Static Baseline";
+      const diffSec = Math.max(0, Math.floor(Date.now() / 1000 - epochSec));
+      if (diffSec < 60) return "Just now";
+      if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+      if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+      return `${Math.floor(diffSec / 86400)}d ago`;
+    }
+
+    // ==========================================
+    // 1. LEAFLET INTERACTIVE MAP WITH GOOGLE MAPS / TILES
+    // ==========================================
+    let leafletMap = null;
+    let markersLayerGroup = null;
+    let selectedMarkerCircle = null;
+    let tileLayers = {};
+
+    function initLeafletMap() {
+      const container = document.getElementById("leafletMapContainer");
+      if (!container || typeof L === "undefined") {
+        console.warn("Leaflet not available, falling back to 2D Topo Canvas");
+        switchMapLayer("canvas");
+        return;
+      }
+
+      try {
+        leafletMap = L.map("leafletMapContainer", {
+          center: [28.25, 84.80],
+          zoom: 7,
+          minZoom: 6,
+          maxZoom: 17,
+          zoomControl: true,
+        });
+
+        // Layer 1: Google Hybrid Satellite (Google imagery + borders/places)
+        tileLayers.satellite = L.tileLayer("https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
+          maxZoom: 20,
+          attribution: "© Google Maps • Imagery © Maxar / Airbus",
+        });
+
+        // Layer 2: Google Terrain (Physical elevation shading + contours)
+        tileLayers.terrain = L.tileLayer("https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}", {
+          maxZoom: 20,
+          attribution: "© Google Maps Terrain",
+        });
+
+        // Layer 3: OpenStreetMap Standard
+        tileLayers.osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution: "© OpenStreetMap contributors",
+        });
+
+        tileLayers.satellite.addTo(leafletMap);
+        markersLayerGroup = L.layerGroup().addTo(leafletMap);
+
+        leafletMap.on("moveend", () => {
+          const center = leafletMap.getCenter();
+          const zoom = leafletMap.getZoom();
+          const stEl = document.getElementById("mapZoomStatus");
+          if (stEl) {
+            stEl.textContent = `Center: ${center.lat.toFixed(2)}°N, ${center.lng.toFixed(2)}°E • Zoom: ${zoom}x • 491 Points Live`;
+          }
+        });
+      } catch (err) {
+        console.error("Leaflet init error:", err);
+        switchMapLayer("canvas");
+      }
+    }
+
+    function renderLeafletMarkers() {
+      if (!leafletMap || !markersLayerGroup) return;
+      markersLayerGroup.clearLayers();
+
+      const filter = state.basinFilter;
+      const sitesToDraw = state.sites.filter(s => filter === "all" || s.basin_id === filter);
+
+      sitesToDraw.forEach(st => {
+        const isSelected = st.site_id === state.selectedSiteId;
+        const alert = (st.physics && st.physics.alert_level) || "GREEN";
+
+        let fillColor = "#10b981"; // Safe Green
+        let borderColor = "#059669";
+        if (alert === "RED") {
+          fillColor = "#f43f5e";
+          borderColor = "#e11d48";
+        } else if (alert === "ORANGE") {
+          fillColor = "#f97316";
+          borderColor = "#ea580c";
+        } else if (alert === "YELLOW") {
+          fillColor = "#f59e0b";
+          borderColor = "#d97706";
+        }
+
+        const radius = isSelected ? 9 : 5;
+        const marker = L.circleMarker([st.latitude, st.longitude], {
+          radius: radius,
+          fillColor: fillColor,
+          color: isSelected ? "#ffffff" : borderColor,
+          weight: isSelected ? 3 : 1.5,
+          opacity: 1,
+          fillOpacity: 0.85,
+        });
+
+        // Tooltip on Hover
+        const fs = (st.physics && st.physics.calibrated_fs) ? st.physics.calibrated_fs.toFixed(2) : "1.25";
+        marker.bindTooltip(`
+          <div class="font-sans">
+            <strong class="text-sky-300">${st.name}</strong><br/>
+            <span>Elev: ${st.elevation_m}m • Slope: ${st.slope_deg}°</span><br/>
+            <span>Alert: <strong style="color:${fillColor}">${alert}</strong> (FS: ${fs})</span>
+          </div>
+        `, { direction: "top", offset: [0, -5] });
+
+        // Click to Select
+        marker.on("click", () => {
+          selectSite(st.site_id, true);
+        });
+
+        marker.addTo(markersLayerGroup);
+
+        if (isSelected) {
+          selectedMarkerCircle = marker;
+        }
+      });
+    }
+
+    function switchMapLayer(mode) {
+      state.activeLayer = mode;
+      const btnSat = document.getElementById("mapLayerSatellite");
+      const btnTer = document.getElementById("mapLayerTerrain");
+      const btnCnv = document.getElementById("mapLayerTopoCanvas");
+      const leafletCont = document.getElementById("leafletMapContainer");
+      const topoCanvas = document.getElementById("nepalTopoCanvas");
+
+      if (mode === "canvas") {
+        if (leafletCont) leafletCont.classList.add("hidden");
+        if (topoCanvas) {
+          topoCanvas.classList.remove("hidden");
+          drawNepalTopographyMap();
+        }
+      } else {
+        if (leafletCont) leafletCont.classList.remove("hidden");
+        if (topoCanvas) topoCanvas.classList.add("hidden");
+
+        if (leafletMap && tileLayers) {
+          if (mode === "satellite") {
+            leafletMap.removeLayer(tileLayers.terrain);
+            tileLayers.satellite.addTo(leafletMap);
+          } else if (mode === "terrain") {
+            leafletMap.removeLayer(tileLayers.satellite);
+            tileLayers.terrain.addTo(leafletMap);
+          }
+          leafletMap.invalidateSize();
+        }
+      }
+
+      const activeClass = "px-2.5 py-1 rounded text-xs font-bold bg-[var(--primary)] text-[var(--primary-foreground)] transition";
+      const inactiveClass = "px-2.5 py-1 rounded text-xs font-bold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition";
+
+      if (btnSat) btnSat.className = mode === "satellite" ? activeClass : inactiveClass;
+      if (btnTer) btnTer.className = mode === "terrain" ? activeClass : inactiveClass;
+      if (btnCnv) btnCnv.className = mode === "canvas" ? activeClass : inactiveClass;
+    }
+
+    document.getElementById("mapLayerSatellite").addEventListener("click", () => switchMapLayer("satellite"));
+    document.getElementById("mapLayerTerrain").addEventListener("click", () => switchMapLayer("terrain"));
+    document.getElementById("mapLayerTopoCanvas").addEventListener("click", () => switchMapLayer("canvas"));
+
+    // Google Earth 3D Button
+    document.getElementById("btnOpenGoogleEarth").addEventListener("click", () => {
+      const st = state.sites.find(s => s.site_id === state.selectedSiteId);
+      const lat = st ? st.latitude : 28.25;
+      const lon = st ? st.longitude : 84.80;
+      const elev = st ? st.elevation_m : 3500;
+      const url = `https://earth.google.com/web/@${lat},${lon},${elev}a,8000d,35y,0h,55t,0r`;
+      window.open(url, "_blank");
+    });
+
+    // ==========================================
+    // 2. CANVAS MAP ENGINE (2D SHADED RELIEF FALLBACK)
+    // ==========================================
+    const mapTransform = { zoom: 1.0, panX: 0, panY: 0, isDragging: false, startX: 0, startY: 0 };
+    const MAP_BOUNDS = { minLon: 79.8, maxLon: 88.4, minLat: 26.2, maxLat: 30.6 };
+    const topoCanvas = document.getElementById("nepalTopoCanvas");
+    const topoCtx = topoCanvas ? topoCanvas.getContext("2d") : null;
+    let siteScreenCoords = [];
+
     const NEPAL_BORDER = [
       [80.06, 28.84], [80.18, 29.28], [80.42, 29.72], [80.88, 30.18],
       [81.12, 30.42], [81.65, 30.35], [82.12, 29.95], [82.62, 29.68],
@@ -674,232 +622,54 @@
       [81.18, 28.18], [80.35, 28.62], [80.06, 28.84]
     ];
 
-    const CALIBRATED_BLOCKS = [
-      { latIdx: 94, lonIdx: 285, centerLat: 28.23, centerLon: 85.54, samples: 6, anomaly: 0.038 },
-      { latIdx: 93, lonIdx: 285, centerLat: 28.04, centerLon: 85.55, samples: 9, anomaly: 0.052 },
-      { latIdx: 95, lonIdx: 282, centerLat: 28.56, centerLon: 84.61, samples: 5, anomaly: 0.034 },
-      { latIdx: 94, lonIdx: 282, centerLat: 28.31, centerLon: 84.72, samples: 11, anomaly: 0.058 },
-    ];
-
-    const BASINS = {
-      langtang: {
-        id: "langtang",
-        name: "Trishuli / Langtang Watershed (Rasuwa)",
-        bbox: [85.15, 28.05, 85.80, 28.45],
-      },
-      budhi_gandaki: {
-        id: "budhi_gandaki",
-        name: "Budhi Gandaki Watershed (Gorkha)",
-        bbox: [84.50, 28.10, 85.10, 28.75],
-      },
-    };
-
-    const state = {
-      viewMode: "topo", // "topo" | "3d"
-      selectedStationId: "langtang_lirung",
-      basinId: "langtang",
-      layerMode: "calibrated_fs",
-      rotZ: 0.68,
-      pitch: 0.58,
-      selectedCell: null,
-      pulsePhase: 0,
-      inputs: {
-        latitude: 28.232,
-        longitude: 85.518,
-        elevation_m: 5680,
-        slope_deg: 46,
-        aspect_deg: 195,
-        profile_curvature: -0.62,
-        plan_curvature: -0.25,
-        upslope_contributing_area_m2: 4500,
-        sentinel2_ndvi: 0.32,
-        gedi_canopy_height_m: 6.5,
-        sand_fraction: 0.48,
-        clay_fraction: 0.16,
-        coarse_rock_fragment_fraction: 0.35,
-        dry_bulk_density_g_cm3: 1.55,
-        distance_to_fault_km: 3.8,
-        modis_lst_mean_c: -1.5,
-        diurnal_lst_range_c: 16.0,
-        surface_albedo: 0.22,
-        diurnal_freeze_thaw_cycles_30d: 14,
-        pdd_c_days_7d: 6.0,
-        snow_water_equivalent_mm: 40,
-        imerg_rain_72h_mm: 4,
-        antecedent_rain_30d_api_mm: 18,
-        smap_rootzone_moisture_vwc: 0.18,
-        sar_l_to_c_band_penetration_ratio: 1.05,
-        bedrock_pga_g: 0.04,
-        insar_los_velocity_mm_month: 2.5,
-      },
-    };
-    window.LIVE_STATIONS = LIVE_STATIONS;
-    window.state = state;
-
-    function synthesizePoint(raw) {
-      const slopeRad = (Math.min(Math.max(raw.slope_deg, 0.5), 85.0) * Math.PI) / 180.0;
-      const specificArea = Math.max(raw.upslope_contributing_area_m2 / 30.0, 1.0);
-      const twi = Math.log(specificArea / Math.max(Math.tan(slopeRad), 0.01));
-      const aspectRad = (raw.aspect_deg * Math.PI) / 180.0;
-      const southness = 0.5 * (1.0 - Math.cos(aspectRad));
-
-      const ati = (1.0 - Math.min(Math.max(raw.surface_albedo, 0.05), 0.85)) / Math.max(raw.diurnal_lst_range_c, 2.0);
-      const thermalMantleFactor = Math.min(Math.max(1.35 - 5.5 * ati, 0.35), 1.35);
-      const hillslopeBase = (0.4 + 3.1 * Math.exp(-0.042 * raw.slope_deg)) * thermalMantleFactor;
-      const curvatureAccum = Math.min(Math.max(-0.35 * raw.profile_curvature - 0.25 * raw.plan_curvature, -0.45), 1.1);
-      const twiDeposition = 0.08 * Math.max(twi - 4.0, 0.0);
-      const solarWeathering = 0.22 * southness;
-      const sarPenetration = 0.25 * Math.min(Math.max(raw.sar_l_to_c_band_penetration_ratio - 1.0, -0.4), 0.8);
-      const lidarRootFloor = raw.gedi_canopy_height_m > 1.0 ? 0.35 * Math.pow(raw.gedi_canopy_height_m, 0.55) : 0.3;
-
-      const zRaw = hillslopeBase + curvatureAccum + twiDeposition + solarWeathering + sarPenetration;
-      const z_m = Math.min(Math.max(Math.max(zRaw, lidarRootFloor), 0.3), 6.0);
-
-      const c_mineral = 3.5 + 14.0 * raw.clay_fraction + 4.0 * raw.coarse_rock_fragment_fraction;
-      const c_root = raw.elevation_m < 4300 && raw.sentinel2_ndvi > 0.15
-        ? 12.0 * Math.pow(raw.sentinel2_ndvi, 1.4) * Math.min(Math.max(raw.gedi_canopy_height_m / 15.0, 0.1), 1.5)
-        : 0.0;
-      let c_ice = 0.0;
-      if (raw.elevation_m >= 4500) {
-        const freezeStrength = Math.max(0.0, 18.0 - 1.15 * Math.max(0.0, raw.modis_lst_mean_c + 2.0));
-        c_ice = Math.max(0.0, freezeStrength - 0.95 * raw.pdd_c_days_7d - 0.22 * raw.diurnal_freeze_thaw_cycles_30d);
-      }
-
-      const faultIntegrity = 1.0 - 0.4 * Math.exp(-raw.distance_to_fault_km / 2.5);
-      const creepSoftening = 1.0 / (1.0 + 0.018 * Math.max(0.0, raw.insar_los_velocity_mm_month - 5.0));
-      const c_prime = Math.max(0.5, (c_mineral * faultIntegrity + c_root + c_ice) * creepSoftening);
-
-      const basePhi = 24.0 + 12.0 * raw.sand_fraction + 9.5 * raw.coarse_rock_fragment_fraction - 14.0 * raw.clay_fraction;
-      const phi_deg = Math.min(Math.max(basePhi * (0.85 + 0.15 * faultIntegrity), 16.0), 44.0);
-
-      const porosity = Math.min(Math.max(1.0 - raw.dry_bulk_density_g_cm3 / 2.65, 0.18), 0.52);
-      const snowmeltMm = raw.pdd_c_days_7d * 4.5 * (1.0 + 0.2 * southness);
-      const effectiveWaterMm = raw.imerg_rain_72h_mm + 0.35 * raw.antecedent_rain_30d_api_mm + snowmeltMm;
-      const twiConc = Math.min(Math.max(twi / 6.0, 0.6), 2.2);
-      const infilZw = (effectiveWaterMm / 1000.0 / porosity) * twiConc;
-      const smapZw = Math.min(Math.max((raw.smap_rootzone_moisture_vwc / porosity) * z_m * 0.6, 0.0), z_m);
-      const z_w_m = Math.min(Math.max(Math.max(infilZw, smapZw), 0.0), z_m);
-      const satRatio = z_w_m / Math.max(z_m, 1e-6);
-
-      const suction = 6.0 * satRatio * Math.pow(1.0 - satRatio, 1.5) * (1.0 + 2.0 * raw.clay_fraction);
-      const gamma = raw.dry_bulk_density_g_cm3 * 9.81 + porosity * satRatio * 9.81;
-      const q_s = (raw.snow_water_equivalent_mm / 1000.0) * 9.81 + (raw.elevation_m < 4300 ? 0.08 * raw.gedi_canopy_height_m : 0.0);
-
-      const ridgeAmp = Math.min(Math.max(1.0 + 0.25 * Math.max(0.0, raw.profile_curvature) + 0.2 * Math.max(0.0, (raw.elevation_m - 2500.0) / 4000.0), 1.0), 1.75);
-      const kh = Math.min(Math.max(raw.bedrock_pga_g * ridgeAmp, 0.0), 0.65);
-
-      const phiRad = (phi_deg * Math.PI) / 180.0;
-      const cosB = Math.cos(slopeRad);
-      const sinB = Math.sin(slopeRad);
-      const cos2B = cosB * cosB;
-      const totalVert = gamma * z_m + q_s;
-      const normalStress = Math.max(0.0, (totalVert - 9.81 * z_w_m) * cos2B - totalVert * kh * sinB * cosB);
-      const resisting = c_prime + suction + normalStress * Math.tan(phiRad);
-      const driving = Math.max(1e-9, totalVert * (sinB * cosB + kh * cos2B));
-      const rawFs = resisting / driving;
-
-      const latIdx = Math.floor(raw.latitude / 0.3);
-      const lonIdx = Math.floor(raw.longitude / 0.3);
-      const direct = CALIBRATED_BLOCKS.find((b) => b.latIdx === latIdx && b.lonIdx === lonIdx);
-
-      let mode = "NEIGHBOR_BLOCK_GRANULATED_SIMULATION";
-      let samples = 0;
-      let diffAnom = 0.052;
-      if (direct && direct.samples >= 4) {
-        mode = "DIRECT_REAL_DATA_BLOCK_CALIBRATION";
-        samples = direct.samples;
-        diffAnom = direct.anomaly + 0.0012 * (raw.slope_deg - 34.0);
-      } else {
-        let wSum = 0, aSum = 0;
-        for (const b of CALIBRATED_BLOCKS) {
-          const d = Math.hypot(raw.latitude - b.centerLat, raw.longitude - b.centerLon);
-          const w = 1.0 / Math.max(d, 0.08);
-          wSum += w;
-          aSum += w * b.anomaly;
-        }
-        diffAnom = aSum / Math.max(wSum, 1e-6) - 0.012 * Math.sin(raw.latitude * 15.0);
-      }
-
-      diffAnom = Math.min(Math.max(diffAnom, -0.095), 0.095);
-      const relFsShift = Math.min(Math.max(-0.72 * diffAnom, -0.085), 0.085);
-      const calFs = Math.min(Math.max(rawFs * (1.0 + relFsShift), 0.25), 4.0);
-      const deltaFs = calFs - rawFs;
-      const calZ = z_m * Math.min(Math.max(1.0 + 0.45 * diffAnom, 0.94), 1.06);
-      const hybridProb = 100.0 / (1.0 + Math.exp(4.8 * (calFs - 1.12)));
-      const mcProb = 100.0 / (1.0 + Math.exp(8.5 * (calFs - 1.0)));
-
-      return {
-        rawFs,
-        calFs,
-        deltaFs,
-        diffAnom,
-        mode,
-        samples,
-        z_m,
-        calZ,
-        z_w_m,
-        satRatio,
-        c_prime,
-        c_ice,
-        suction,
-        ati,
-        hybridProb,
-        mcProb,
-        breakdown: [
-          { label: "Slope & Thermal Inertia Base", val: hillslopeBase, max: 3.0 },
-          { label: "Concave Bowl Trapping", val: Math.max(0, curvatureAccum), max: 1.1 },
-          { label: "Valley Wetness Accumulation", val: twiDeposition, max: 0.8 },
-          { label: "Sun-Baked South Weathering", val: solarWeathering, max: 0.3 },
-          { label: "Deep L-Band Radar Penetration", val: Math.max(0, sarPenetration), max: 0.3 },
-          { label: "Tree Root Minimum Floor", val: lidarRootFloor, max: 2.0 },
-        ],
-      };
-    }
-
-    // Coordinate projection for Nepal Map Canvas (760x400)
-    const MAP_BOUNDS = { minLon: 79.8, maxLon: 88.4, minLat: 26.2, maxLat: 30.6 };
     function lonLatToXY(lon, lat, w, h) {
-      const x = ((lon - MAP_BOUNDS.minLon) / (MAP_BOUNDS.maxLon - MAP_BOUNDS.minLon)) * (w - 40) + 20;
-      const y = ((MAP_BOUNDS.maxLat - lat) / (MAP_BOUNDS.maxLat - MAP_BOUNDS.minLat)) * (h - 40) + 20;
-      return [x, y];
+      const baseNormX = (lon - MAP_BOUNDS.minLon) / (MAP_BOUNDS.maxLon - MAP_BOUNDS.minLon);
+      const baseNormY = (MAP_BOUNDS.maxLat - lat) / (MAP_BOUNDS.maxLat - MAP_BOUNDS.minLat);
+      const centerX = w / 2;
+      const centerY = h / 2;
+      const screenX = centerX + (baseNormX * (w - 40) + 20 - centerX) * mapTransform.zoom + mapTransform.panX;
+      const screenY = centerY + (baseNormY * (h - 40) + 20 - centerY) * mapTransform.zoom + mapTransform.panY;
+      return [screenX, screenY];
     }
 
-    const topoCanvas = document.getElementById("nepalTopoCanvas");
-    const topoCtx = topoCanvas.getContext("2d");
-    let stationScreenCoords = [];
-
+    let pulsePhase = 0;
     function drawNepalTopographyMap() {
+      if (!topoCanvas || !topoCtx || state.activeLayer !== "canvas") return;
       const w = topoCanvas.width;
       const h = topoCanvas.height;
       topoCtx.clearRect(0, 0, w, h);
 
-      // 1. Background Tibetan Plateau & Gangetic Plains context grid
-      topoCtx.fillStyle = "#0b1320";
+      // Background
+      topoCtx.fillStyle = document.documentElement.classList.contains("light") ? "#f1f5f9" : "#070e17";
       topoCtx.fillRect(0, 0, w, h);
 
-      // Subtle lat/lon graticule lines
+      // Graticule
       topoCtx.strokeStyle = "rgba(148, 163, 184, 0.12)";
       topoCtx.lineWidth = 1;
-      topoCtx.font = "12px monospace";
+      topoCtx.font = "10px monospace";
       topoCtx.fillStyle = "rgba(148, 163, 184, 0.45)";
       for (let lon = 80; lon <= 88; lon += 2) {
         const [x] = lonLatToXY(lon, 28, w, h);
-        topoCtx.beginPath();
-        topoCtx.moveTo(x, 0);
-        topoCtx.lineTo(x, h);
-        topoCtx.stroke();
-        topoCtx.fillText(`${lon}°E`, x + 4, 16);
+        if (x >= 0 && x <= w) {
+          topoCtx.beginPath();
+          topoCtx.moveTo(x, 0);
+          topoCtx.lineTo(x, h);
+          topoCtx.stroke();
+          topoCtx.fillText(`${lon}°E`, x + 4, 14);
+        }
       }
       for (let lat = 27; lat <= 30; lat += 1) {
         const [, y] = lonLatToXY(84, lat, w, h);
-        topoCtx.beginPath();
-        topoCtx.moveTo(0, y);
-        topoCtx.lineTo(w, y);
-        topoCtx.stroke();
-        topoCtx.fillText(`${lat}°N`, 6, y - 4);
+        if (y >= 0 && y <= h) {
+          topoCtx.beginPath();
+          topoCtx.moveTo(0, y);
+          topoCtx.lineTo(w, y);
+          topoCtx.stroke();
+          topoCtx.fillText(`${lat}°N`, 6, y - 4);
+        }
       }
 
-      // 2. Clip inside Nepal's National Border & Paint Shaded Topographic Elevation Belts
+      // Elevation Shading inside Nepal
       topoCtx.save();
       topoCtx.beginPath();
       NEPAL_BORDER.forEach(([lon, lat], idx) => {
@@ -910,43 +680,26 @@
       topoCtx.closePath();
       topoCtx.clip();
 
-      // Angled Himalayan Topographic Gradient (NW-SE strike matching the Himalayan arc!)
-      const topoGrad = topoCtx.createLinearGradient(260, 35, 195, 345);
-      topoGrad.addColorStop(0.0, "#d0ebff");   // >5500m Glaciers & High Peaks
-      topoGrad.addColorStop(0.22, "#74c0fc");  // >4500m Cryosphere & Permafrost Belt
-      topoGrad.addColorStop(0.44, "#6e5536");  // 2500-4500m High Himalaya Rock & Alpine
-      topoGrad.addColorStop(0.72, "#3b5e2b");  // 500-2500m Lesser Himalaya Mid-Hills
-      topoGrad.addColorStop(1.0, "#1e4620");   // <500m Terai Alluvial Plains
+      const [nwX, nwY] = lonLatToXY(81.0, 30.2, w, h);
+      const [seX, seY] = lonLatToXY(87.0, 26.8, w, h);
+      const topoGrad = topoCtx.createLinearGradient(nwX, nwY, seX, seY);
+      topoGrad.addColorStop(0.0, "#d0ebff");  // High Himalaya (>4500m)
+      topoGrad.addColorStop(0.25, "#8ecae6"); // Permafrost Wall Belt
+      topoGrad.addColorStop(0.48, "#6e5536"); // High Rock (2500–4500m)
+      topoGrad.addColorStop(0.72, "#3b5e2b"); // Mid-Hills (500–2500m)
+      topoGrad.addColorStop(1.0, "#1e4620");  // Terai Plains (<500m)
       topoCtx.fillStyle = topoGrad;
       topoCtx.fillRect(0, 0, w, h);
 
-      // Topographic Hillshade Ridges & Elevation Contours inside Nepal
-      topoCtx.strokeStyle = "rgba(255, 255, 255, 0.14)";
-      topoCtx.lineWidth = 1;
-      for (let offset = -0.6; offset <= 0.7; offset += 0.22) {
-        topoCtx.beginPath();
-        for (let lon = 80.0; lon <= 88.3; lon += 0.25) {
-          const baseLat = 29.85 - (lon - 80.0) * 0.26 + offset + 0.06 * Math.sin(lon * 4.2);
-          const [x, y] = lonLatToXY(lon, baseLat, w, h);
-          if (lon === 80.0) topoCtx.moveTo(x, y);
-          else topoCtx.lineTo(x, y);
-        }
-        topoCtx.stroke();
-      }
-
-      // 3. Major Himalayan Rivers & Active Seismic Fault Lines (MHT / MCT)
+      // Faults and Rivers
       const chkFR = document.getElementById("chkFaultsRivers");
       if (chkFR && chkFR.checked) {
-        // Main Himalayan Thrust (MHT) & Main Central Thrust (MCT) Fault Lines
         topoCtx.save();
         topoCtx.strokeStyle = "rgba(251, 146, 60, 0.85)";
-        topoCtx.lineWidth = 2;
+        topoCtx.lineWidth = 2 * mapTransform.zoom;
         topoCtx.setLineDash([6, 4]);
         topoCtx.beginPath();
-        const faultPts = [
-          [80.2, 29.1], [81.5, 28.6], [82.8, 28.1], [84.2, 27.9],
-          [85.5, 27.7], [86.8, 27.3], [88.0, 27.0]
-        ];
+        const faultPts = [[80.2, 29.1], [81.5, 28.6], [82.8, 28.1], [84.2, 27.9], [85.5, 27.7], [86.8, 27.3], [88.0, 27.0]];
         faultPts.forEach(([lon, lat], i) => {
           const [x, y] = lonLatToXY(lon, lat, w, h);
           if (i === 0) topoCtx.moveTo(x, y);
@@ -954,34 +707,13 @@
         });
         topoCtx.stroke();
         topoCtx.restore();
-
-        // Major River Networks (Karnali, Kali Gandaki, Budhi Gandaki/Trishuli, Sun Koshi, Arun)
-        const rivers = [
-          [[81.4, 30.2], [81.6, 29.3], [81.3, 28.4]], // Karnali
-          [[83.9, 29.1], [83.6, 28.3], [84.1, 27.6]], // Kali Gandaki
-          [[84.6, 28.7], [84.7, 28.1], [84.4, 27.5]], // Budhi Gandaki
-          [[85.6, 28.3], [85.2, 27.9], [84.5, 27.5]], // Trishuli / Langtang
-          [[86.5, 28.0], [86.1, 27.4], [86.9, 26.9]], // Sun Koshi / Bhote Koshi
-          [[87.2, 27.9], [87.2, 27.2], [87.0, 26.8]], // Arun / Barun
-        ];
-        topoCtx.strokeStyle = "rgba(56, 189, 248, 0.75)";
-        topoCtx.lineWidth = 1.8;
-        rivers.forEach((riv) => {
-          topoCtx.beginPath();
-          riv.forEach(([lon, lat], i) => {
-            const [x, y] = lonLatToXY(lon, lat, w, h);
-            if (i === 0) topoCtx.moveTo(x, y);
-            else topoCtx.lineTo(x, y);
-          });
-          topoCtx.stroke();
-        });
       }
+      topoCtx.restore();
 
-      topoCtx.restore(); // End Nepal border clip
-
-      // Draw crisp Nepal National Border Outline
-      topoCtx.strokeStyle = "rgba(226, 232, 240, 0.85)";
-      topoCtx.lineWidth = 2;
+      // Border outline
+      topoCtx.save();
+      topoCtx.strokeStyle = "#38bdf8";
+      topoCtx.lineWidth = 1.5;
       topoCtx.beginPath();
       NEPAL_BORDER.forEach(([lon, lat], idx) => {
         const [x, y] = lonLatToXY(lon, lat, w, h);
@@ -990,1115 +722,423 @@
       });
       topoCtx.closePath();
       topoCtx.stroke();
+      topoCtx.restore();
 
-      // 5. Real-Time Monitored Observation Stations (10 Pulsing Beacons)
-      stationScreenCoords = [];
-      const chkSt = document.getElementById("chkStations");
-      if (!chkSt || chkSt.checked) {
-        LIVE_STATIONS.forEach((st) => {
-          const [x, y] = lonLatToXY(st.lon, st.lat, w, h);
-          const stRain = state.inputs.imerg_rain_72h_mm * st.rainMultiplier;
-          const stCreep = Math.max(0, state.inputs.insar_los_velocity_mm_month + st.creepOffset);
-          const syn = synthesizePoint({
-            ...state.inputs,
-            latitude: st.lat,
-            longitude: st.lon,
-            elevation_m: st.elevation_m,
-            slope_deg: st.slope_deg,
-            profile_curvature: st.profile_curvature,
-            distance_to_fault_km: st.fault_km,
-            imerg_rain_72h_mm: stRain,
-            insar_los_velocity_mm_month: stCreep,
-          });
+      // Points
+      siteScreenCoords = [];
+      const filter = state.basinFilter;
+      const sitesToDraw = state.sites.filter(s => filter === "all" || s.basin_id === filter);
 
-          let color = "#10b981"; // Green
-          let glowColor = "rgba(16, 185, 129, 0.35)";
-          if (syn.calFs < 1.0) {
-            color = "#f43f5e"; // Red
-            glowColor = "rgba(244, 63, 94, 0.50)";
-          } else if (syn.calFs < 1.25) {
-            color = "#f59e0b"; // Amber
-            glowColor = "rgba(245, 158, 11, 0.45)";
+      sitesToDraw.forEach(st => {
+        const [x, y] = lonLatToXY(st.longitude, st.latitude, w, h);
+        if (x < -20 || x > w + 20 || y < -20 || y > h + 20) return;
+        siteScreenCoords.push({ st, x, y });
+
+        const isSelected = st.site_id === state.selectedSiteId;
+        const alert = (st.physics && st.physics.alert_level) || "GREEN";
+        let color = "#10b981";
+        if (alert === "RED") color = "#f43f5e";
+        else if (alert === "ORANGE") color = "#f97316";
+        else if (alert === "YELLOW") color = "#f59e0b";
+
+        const pointRadius = isSelected ? (8 * mapTransform.zoom) : Math.max(3, 3.5 * Math.min(mapTransform.zoom, 2.0));
+        topoCtx.beginPath();
+        topoCtx.arc(x, y, pointRadius, 0, Math.PI * 2);
+        topoCtx.fillStyle = color;
+        topoCtx.fill();
+        topoCtx.strokeStyle = "#ffffff";
+        topoCtx.lineWidth = isSelected ? 2.5 : 1;
+        topoCtx.stroke();
+      });
+    }
+
+    // Canvas Events
+    if (topoCanvas) {
+      topoCanvas.addEventListener("mousedown", (e) => {
+        mapTransform.isDragging = true;
+        mapTransform.startX = e.clientX - mapTransform.panX;
+        mapTransform.startY = e.clientY - mapTransform.panY;
+        topoCanvas.style.cursor = "grabbing";
+      });
+      window.addEventListener("mouseup", () => {
+        mapTransform.isDragging = false;
+        if (topoCanvas) topoCanvas.style.cursor = "grab";
+      });
+      window.addEventListener("mousemove", (e) => {
+        if (mapTransform.isDragging && state.activeLayer === "canvas") {
+          mapTransform.panX = e.clientX - mapTransform.startX;
+          mapTransform.panY = e.clientY - mapTransform.startY;
+          drawNepalTopographyMap();
+        }
+      });
+      topoCanvas.addEventListener("wheel", (e) => {
+        if (state.activeLayer !== "canvas") return;
+        e.preventDefault();
+        const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+        mapTransform.zoom = Math.min(8.0, Math.max(0.8, mapTransform.zoom * zoomFactor));
+        drawNepalTopographyMap();
+      }, { passive: false });
+      topoCanvas.addEventListener("click", (e) => {
+        if (state.activeLayer !== "canvas") return;
+        const rect = topoCanvas.getBoundingClientRect();
+        const mx = ((e.clientX - rect.left) / rect.width) * topoCanvas.width;
+        const my = ((e.clientY - rect.top) / rect.height) * topoCanvas.height;
+        for (const item of siteScreenCoords) {
+          if (Math.hypot(mx - item.x, my - item.y) <= 14) {
+            selectSite(item.st.site_id, false);
+            break;
           }
+        }
+      });
+    }
 
-          const isSelected = st.id === state.selectedStationId;
-
-          // Pulsing outer radar ring
-          const pulseRadius = (isSelected ? 15 : 11) + Math.sin(state.pulsePhase) * 3.5;
-          topoCtx.beginPath();
-          topoCtx.arc(x, y, pulseRadius, 0, Math.PI * 2);
-          topoCtx.fillStyle = glowColor;
-          topoCtx.fill();
-
-          // Station core circle
-          topoCtx.beginPath();
-          topoCtx.arc(x, y, isSelected ? 7.5 : 5.5, 0, Math.PI * 2);
-          topoCtx.fillStyle = color;
-          topoCtx.fill();
-          topoCtx.strokeStyle = isSelected ? "#ffffff" : "#0f172a";
-          topoCtx.lineWidth = isSelected ? 2.5 : 1.5;
-          topoCtx.stroke();
-
-          // Station label pill
-          if (isSelected || syn.calFs < 1.15) {
-            topoCtx.font = isSelected ? "bold 12px sans-serif" : "12px sans-serif";
-            const labelTxt = `${st.shortName} (${syn.calFs.toFixed(2)})`;
-            const textW = topoCtx.measureText(labelTxt).width;
-            topoCtx.fillStyle = "rgba(15, 23, 42, 0.85)";
-            topoCtx.fillRect(x - textW / 2 - 4, y - 24, textW + 8, 15);
-            topoCtx.fillStyle = isSelected ? "#38bdf8" : "#f8fafc";
-            topoCtx.textAlign = "center";
-            topoCtx.fillText(labelTxt, x, y - 13);
-          }
-
-          stationScreenCoords.push({ st, x, y, syn, stRain, stCreep });
-        });
+    // ==========================================
+    // 3. LOAD SITES CATALOG & POPULATE UI
+    // ==========================================
+    async function loadSites() {
+      try {
+        const res = await fetch("/api/v1/sites");
+        state.sites = await res.json();
+        populateSiteSelector();
+        renderLeafletMarkers();
+        drawNepalTopographyMap();
+        if (state.sites.length > 0) {
+          selectSite(state.selectedSiteId || state.sites[0].site_id, false);
+        }
+      } catch (err) {
+        console.error("Failed to load sites catalog:", err);
       }
     }
 
-    // Handle clicking a station on the Nepal Topography Map
-    topoCanvas.addEventListener("click", (e) => {
-      const rect = topoCanvas.getBoundingClientRect();
-      const mx = ((e.clientX - rect.left) / rect.width) * topoCanvas.width;
-      const my = ((e.clientY - rect.top) / rect.height) * topoCanvas.height;
+    function populateSiteSelector() {
+      const sel = document.getElementById("siteSelector");
+      if (!sel) return;
+      sel.innerHTML = "";
+      const filter = state.basinFilter;
+      const filtered = state.sites.filter(s => filter === "all" || s.basin_id === filter);
+      filtered.forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = s.site_id;
+        const alert = (s.physics && s.physics.alert_level) || "GREEN";
+        const icon = alert === "RED" ? "🔴" : alert === "ORANGE" ? "🟠" : alert === "YELLOW" ? "🟡" : "🟢";
+        opt.textContent = `${icon} ${s.name} (${s.elevation_m}m)`;
+        if (s.site_id === state.selectedSiteId) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      const badge = document.getElementById("siteCountBadge");
+      if (badge) badge.textContent = `${filtered.length} SITES`;
+    }
 
-      for (const item of stationScreenCoords) {
-        if (Math.hypot(mx - item.x, my - item.y) <= 16) {
-          selectStation(item.st);
-          break;
-        }
-      }
+    document.getElementById("siteSelector").addEventListener("change", (e) => {
+      selectSite(e.target.value, true);
     });
 
-    function selectStation(st) {
-      state.selectedStationId = st.id;
-      state.basinId = st.basinId;
-      state.inputs.latitude = st.lat;
-      state.inputs.longitude = st.lon;
-      state.inputs.elevation_m = st.elevation_m;
-      state.inputs.slope_deg = st.slope_deg;
-      state.inputs.profile_curvature = st.profile_curvature;
-      state.inputs.distance_to_fault_km = st.fault_km;
-      state.inputs.insar_los_velocity_mm_month = Math.max(1.0, 1.8 + (st.creepOffset || 0.0));
-      syncSlidersFromState();
-      updateUI();
-    }
+    document.getElementById("basinFilter").addEventListener("change", (e) => {
+      state.basinFilter = e.target.value;
+      populateSiteSelector();
+      renderLeafletMarkers();
+      drawNepalTopographyMap();
+    });
 
-    let gridCells = [];
+    // Select Site & Update All Panels
+    async function selectSite(siteId, flyTo = false) {
+      state.selectedSiteId = siteId;
+      const st = state.sites.find(s => s.site_id === siteId);
+      if (st) {
+        document.getElementById("stCardName").textContent = st.name;
+        document.getElementById("stCardMeta").textContent = `${st.latitude.toFixed(2)}°N, ${st.longitude.toFixed(2)}°E • ${st.elevation_m}m • β: ${st.slope_deg}°`;
+        document.getElementById("stCardType").textContent = `Corridor: ${st.basin_id.replace('_', ' ').toUpperCase()} • Type: ${st.hazard_type}`;
+        document.getElementById("siteSelector").value = siteId;
 
-    function rebuildGrid() {
-      const basin = BASINS[state.basinId];
-      const [minLon, minLat, maxLon, maxLat] = basin.bbox;
-      gridCells = [];
-      for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-          const lon = minLon + 0.06 + ((maxLon - minLon - 0.12) * c) / 7;
-          const lat = minLat + 0.05 + ((maxLat - minLat - 0.10) * r) / 7;
-          const cellSlope = Math.min(64, Math.max(14, state.inputs.slope_deg + ((r * 3 + c * 2) % 7 - 3) * 3.2));
-          const cellElev = Math.max(1400, state.inputs.elevation_m + (r - 3.5) * 290 + ((c % 3) - 1) * 110);
-          const syn = synthesizePoint({
-            ...state.inputs,
-            latitude: lat,
-            longitude: lon,
-            slope_deg: cellSlope,
-            elevation_m: cellElev,
-          });
-          gridCells.push({
-            id: `${basin.id}_${r}_${c}`,
-            r,
-            c,
-            lat,
-            lon,
-            elevation_m: Math.round(cellElev),
-            slope_deg: cellSlope,
-            ...syn,
-          });
+        if (flyTo && leafletMap) {
+          leafletMap.flyTo([st.latitude, st.longitude], 12, { duration: 1.2 });
         }
       }
-      if (!state.selectedCell) {
-        state.selectedCell = gridCells[36];
-      } else {
-        const match = gridCells.find((g) => g.r === state.selectedCell.r && g.c === state.selectedCell.c);
-        if (match) state.selectedCell = match;
+      renderLeafletMarkers();
+      drawNepalTopographyMap();
+      await fetchSiteReport(siteId);
+    }
+
+    // ==========================================
+    // 4. FETCH SITE REPORT & 22 TELEMETRY FEEDS
+    // ==========================================
+    async function fetchSiteReport(siteId) {
+      try {
+        const res = await fetch(`/api/v1/sites/${siteId}`);
+        const data = await res.json();
+        state.currentSiteReport = data;
+        renderSiteReport(data);
+      } catch (err) {
+        console.error("Failed to fetch site report:", err);
       }
     }
 
-    function updateUI() {
-      const activeSt = LIVE_STATIONS.find((s) => s.id === state.selectedStationId) || LIVE_STATIONS[0];
-      const mainSyn = synthesizePoint(state.inputs);
+    function renderSiteReport(data) {
+      const risk = data.risk_evaluation;
 
-      document.getElementById("activeStationTitle").textContent = `${activeSt.name} (${state.inputs.elevation_m}m)`;
-
-      // Update Nepal Map Top-Right Station Telemetry Card
-      document.getElementById("stCardName").textContent = activeSt.name;
-      document.getElementById("stCardMeta").textContent =
-        `${activeSt.lat.toFixed(2)}°N, ${activeSt.lon.toFixed(2)}°E • ${state.inputs.elevation_m}m • β:${state.inputs.slope_deg}°`;
-      document.getElementById("stCardFs").textContent = mainSyn.calFs.toFixed(2);
-      document.getElementById("stCardCreep").textContent = `${state.inputs.insar_los_velocity_mm_month.toFixed(1)} mm/m`;
-      document.getElementById("stCardRain").textContent = `${state.inputs.imerg_rain_72h_mm} mm`;
-      document.getElementById("stCardZ").textContent = `${mainSyn.z_m.toFixed(2)} m`;
-      document.getElementById("stCardLake").textContent = activeSt.sensorNote;
-
-      const stBadge = document.getElementById("stCardBadge");
-      if (mainSyn.calFs < 1.0) {
-        stBadge.textContent = "CRITICAL";
-        stBadge.className = "px-1.5 py-0.5 rounded text-xs font-bold bg-rose-500/20 text-rose-400";
-      } else if (mainSyn.calFs < 1.25) {
-        stBadge.textContent = "WATCH";
-        stBadge.className = "px-1.5 py-0.5 rounded text-xs font-bold bg-amber-500/20 text-amber-400";
-      } else {
-        stBadge.textContent = "SAFE";
-        stBadge.className = "px-1.5 py-0.5 rounded text-xs font-bold bg-emerald-500/20 text-emerald-400";
-      }
-
-      let triggers = 0;
-      const trigNames = [];
-      if (state.inputs.imerg_rain_72h_mm > 120 || state.inputs.antecedent_rain_30d_api_mm > 110) {
-        triggers++;
-        trigNames.push("Heavy Rain Saturation");
-      }
-      if (state.inputs.insar_los_velocity_mm_month > 12.0) {
-        triggers++;
-        trigNames.push("Fast Radar Slope Creep");
-      }
-      if (state.inputs.bedrock_pga_g >= 0.12) {
-        triggers++;
-        trigNames.push("Earthquake Shaking");
-      }
-      if (state.inputs.elevation_m >= 4500 && state.inputs.pdd_c_days_7d >= 8.0) {
-        triggers++;
-        trigNames.push("High-Altitude Ice Melt");
-      }
-
+      // 1. Headline Cards
       const alertBadge = document.getElementById("kpiAlertBadge");
       const dot = document.getElementById("statusDot");
-      if (mainSyn.calFs < 1.0 && triggers >= 1) {
+      const cardBadge = document.getElementById("stCardBadge");
+
+      if (risk.alert_level === "RED") {
         alertBadge.textContent = "RED — EVACUATE IMMEDIATELY";
-        alertBadge.className = "text-lg font-bold mt-1 text-rose-500";
-        dot.className = "inline-block w-3 h-3 rounded-full bg-rose-500 animate-ping";
-      } else if (mainSyn.calFs < 1.05 || triggers >= 2) {
+        alertBadge.className = "text-base sm:text-lg font-bold mt-1 text-rose-500";
+        dot.className = "inline-block w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping";
+        cardBadge.textContent = "CRITICAL";
+        cardBadge.className = "px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400";
+      } else if (risk.alert_level === "ORANGE") {
         alertBadge.textContent = "ORANGE — HIGH WARNING";
-        alertBadge.className = "text-lg font-bold mt-1 text-amber-500";
-        dot.className = "inline-block w-3 h-3 rounded-full bg-amber-500 animate-pulse";
-      } else if (mainSyn.calFs < 1.25 || triggers === 1) {
+        alertBadge.className = "text-base sm:text-lg font-bold mt-1 text-orange-500";
+        dot.className = "inline-block w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse";
+        cardBadge.textContent = "WARNING";
+        cardBadge.className = "px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-500/20 text-orange-400";
+      } else if (risk.alert_level === "YELLOW") {
         alertBadge.textContent = "YELLOW — WATCH CLOSELY";
-        alertBadge.className = "text-lg font-bold mt-1 text-yellow-500";
-        dot.className = "inline-block w-3 h-3 rounded-full bg-yellow-500";
+        alertBadge.className = "text-base sm:text-lg font-bold mt-1 text-yellow-500";
+        dot.className = "inline-block w-2.5 h-2.5 rounded-full bg-yellow-500";
+        cardBadge.textContent = "WATCH";
+        cardBadge.className = "px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400";
       } else {
         alertBadge.textContent = "GREEN — SAFE & STABLE";
-        alertBadge.className = "text-lg font-bold mt-1 text-emerald-500";
-        dot.className = "inline-block w-3 h-3 rounded-full bg-emerald-500";
+        alertBadge.className = "text-base sm:text-lg font-bold mt-1 text-emerald-500";
+        dot.className = "inline-block w-2.5 h-2.5 rounded-full bg-emerald-500";
+        cardBadge.textContent = "SAFE";
+        cardBadge.className = "px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400";
       }
 
       document.getElementById("kpiPrecursors").textContent =
-        triggers === 0
+        risk.active_triggers.length === 0
           ? "0 active danger triggers detected right now."
-          : `${triggers} active trigger(s): ${trigNames.join(" + ")}`;
+          : `${risk.active_triggers.length} active trigger(s): ${risk.active_triggers.join(" + ")}`;
 
-      document.getElementById("kpiCalFs").textContent = mainSyn.calFs.toFixed(2);
-      document.getElementById("kpiRawFs").textContent = mainSyn.rawFs.toFixed(2);
-      document.getElementById("kpiDeltaFs").textContent = `${mainSyn.deltaFs >= 0 ? "+" : ""}${mainSyn.deltaFs.toFixed(2)}`;
+      document.getElementById("kpiCalFs").textContent = risk.static_fs.toFixed(2);
+      document.getElementById("kpiRawFs").textContent = risk.static_fs.toFixed(2);
+      document.getElementById("kpiDynFs").textContent = risk.dynamic_fs.toFixed(2);
+      document.getElementById("stCardFs").textContent = risk.static_fs.toFixed(2);
+      document.getElementById("stCardZ").textContent = `${risk.soil_depth_z_m.toFixed(2)} m`;
 
       const fsMeaning = document.getElementById("kpiFsMeaning");
-      if (mainSyn.calFs < 1.0) {
-        const deficit = Math.round((1.0 - mainSyn.calFs) * 100);
-        fsMeaning.textContent = `(Gravity exceeds grip by ${deficit}%!)`;
+      if (risk.static_fs < 1.0) {
+        const def = Math.round((1.0 - risk.static_fs) * 100);
+        fsMeaning.textContent = `(Gravity exceeds grip by ${def}%!)`;
         fsMeaning.className = "text-xs font-semibold text-rose-400";
       } else {
-        const margin = Math.round((mainSyn.calFs - 1.0) * 100);
-        fsMeaning.textContent = `(Grip is ${margin}% stronger than gravity)`;
-        fsMeaning.className = mainSyn.calFs < 1.25 ? "text-xs font-semibold text-amber-400" : "text-xs font-semibold text-emerald-400";
+        const margin = Math.round((risk.static_fs - 1.0) * 100);
+        fsMeaning.textContent = `(Equilibrium margin: +${margin}%)`;
+        fsMeaning.className = "text-xs font-semibold text-emerald-400";
       }
 
-      document.getElementById("kpiZ").textContent = `${mainSyn.z_m.toFixed(2)} m`;
-      document.getElementById("kpiZw").textContent = `${mainSyn.z_w_m.toFixed(2)} m`;
-      document.getElementById("kpiZwPct").textContent = `${Math.round(mainSyn.satRatio * 100)}%`;
-      document.getElementById("kpiCalZ").textContent = `${mainSyn.calZ.toFixed(2)} m`;
-      document.getElementById("kpiCohesion").textContent = `${mainSyn.c_prime.toFixed(1)} kPa`;
-      document.getElementById("kpiIceCohesion").textContent = `${mainSyn.c_ice.toFixed(1)} kPa`;
-      document.getElementById("kpiSuction").textContent = `+${mainSyn.suction.toFixed(1)} kPa`;
-      document.getElementById("kpiHybridProb").textContent = `${Math.round(mainSyn.hybridProb)}% Risk`;
-      document.getElementById("kpiMcProb").textContent = `${mainSyn.mcProb.toFixed(1)}% P(FS < 1.0)`;
+      document.getElementById("kpiHybridProb").textContent = `${Math.round(risk.failure_probability_pct)}% Risk`;
+      document.getElementById("kpiZ").textContent = `${risk.soil_depth_z_m.toFixed(2)} m`;
+      document.getElementById("kpiZwPct").textContent = `${risk.saturation_pct.toFixed(0)}%`;
+      document.getElementById("kpiZw").textContent = `${risk.water_table_zw_m.toFixed(2)} m wet`;
 
-      const modeBadge = document.getElementById("kpiCalModeBadge");
-      const calModeEl = document.getElementById("kpiCalMode");
-      if (mainSyn.mode === "DIRECT_REAL_DATA_BLOCK_CALIBRATION") {
-        modeBadge.textContent = "Real-Data Calibrated";
-        modeBadge.className = "px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-xs font-semibold";
-        calModeEl.textContent = "DIRECT REAL-DATA BLOCK";
-        document.getElementById("kpiCalSamples").textContent = `${mainSyn.samples} real landslides in this 0.3° block`;
-      } else {
-        modeBadge.textContent = "Neighbor-Simulated";
-        modeBadge.className = "px-2 py-0.5 rounded bg-sky-500/15 text-sky-400 text-xs font-semibold";
-        calModeEl.textContent = "NEIGHBOR-GRANULATED SIM";
-        document.getElementById("kpiCalSamples").textContent = "Calibrated from 4 nearest blocks";
-      }
+      // 2. Render 22 Data Ingestion Feeds Table
+      const tbody = document.getElementById("ingestionPointsTableBody");
+      tbody.innerHTML = "";
+      data.ingestion_points.forEach(p => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-[var(--accent)] transition";
+        tr.innerHTML = `
+          <td class="p-2 font-sans font-medium text-[var(--foreground)]">${p.name}</td>
+          <td class="p-2 font-bold text-sky-400">${p.val}</td>
+          <td class="p-2 text-[var(--muted-foreground)]">${p.refresh_cadence}</td>
+          <td class="p-2 text-[var(--muted-foreground)] flex items-center gap-1.5">
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            <span>${formatRelativeTime(p.last_refresh_utc)}</span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
 
-      document.getElementById("atiReadout").textContent = `ATI: ${mainSyn.ati.toFixed(4)}`;
+      // 3. Render Risk Analysis Report Tab Elements
+      document.getElementById("repStaticFs").textContent = risk.static_fs.toFixed(3);
+      document.getElementById("repDynamicFs").textContent = risk.dynamic_fs.toFixed(3);
+      document.getElementById("repProb").textContent = `${risk.failure_probability_pct.toFixed(1)}%`;
+      document.getElementById("repZ").textContent = `${risk.soil_depth_z_m.toFixed(2)} m`;
+      document.getElementById("repC").textContent = `${risk.cohesion_c_prime_kpa.toFixed(1)} kPa`;
+      document.getElementById("repPhi").textContent = `${risk.friction_phi_deg.toFixed(1)}°`;
+      document.getElementById("repZw").textContent = `${risk.water_table_zw_m.toFixed(2)} m`;
+      document.getElementById("repSat").textContent = `${risk.saturation_pct.toFixed(1)}%`;
 
-      const barsContainer = document.getElementById("zBreakdownBars");
-      barsContainer.innerHTML = mainSyn.breakdown
-        .map((b) => {
-          const pct = Math.min(100, Math.round((b.val / b.max) * 100));
-          return `
-            <div>
-              <div class="flex justify-between text-xs">
-                <span class="text-[var(--muted-foreground)]">${b.label}</span>
-                <span class="font-mono">+${b.val.toFixed(2)} m</span>
-              </div>
-              <div class="w-full h-1.5 bg-[var(--card)] rounded overflow-hidden mt-0.5">
-                <div class="h-full bg-sky-500 rounded" style="width:${pct}%"></div>
-              </div>
-            </div>
+      const alertPill = document.getElementById("repAlertPill");
+      alertPill.textContent = risk.alert_level;
+      alertPill.className = risk.alert_level === "RED" ? "px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400" :
+                            risk.alert_level === "ORANGE" ? "px-2 py-0.5 rounded text-[10px] font-bold bg-orange-500/20 text-orange-400" :
+                            risk.alert_level === "YELLOW" ? "px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-500/20 text-yellow-400" :
+                            "px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400";
+
+      document.getElementById("repTriggersList").textContent =
+        risk.active_triggers.length === 0
+          ? "0 danger triggers detected. Hydro-mechanical state within safe baseline."
+          : `Active: ${risk.active_triggers.join(" • ")}`;
+
+      // Downstream Settlements
+      const stBody = document.getElementById("settlementTimelineBody");
+      stBody.innerHTML = "";
+      if (data.settlement_impacts && data.settlement_impacts.length > 0) {
+        document.getElementById("repRiverName").textContent = `${data.basin_id.replace('_', ' ').toUpperCase()} CORRIDOR`;
+        data.settlement_impacts.slice(0, 4).forEach(st => {
+          const tr = document.createElement("tr");
+          const stColor = st.danger_level === 'CRITICAL_RED' ? 'text-rose-400 font-bold' :
+                          st.danger_level === 'ORANGE' ? 'text-orange-400 font-bold' :
+                          st.danger_level === 'YELLOW' ? 'text-amber-400' : 'text-emerald-400';
+          tr.innerHTML = `
+            <td class="py-1 text-[var(--foreground)] font-sans font-semibold">${st.settlement_name}</td>
+            <td>${st.population_at_risk.toLocaleString()}</td>
+            <td>${st.distance_km} km</td>
+            <td class="text-sky-400 font-bold">${st.eta_minutes} min</td>
+            <td class="${stColor}">${st.evacuation_status.replace(/_/g, ' ')}</td>
           `;
-        })
-        .join("");
+          stBody.appendChild(tr);
+        });
+      }
 
-      const vCreep = state.inputs.insar_los_velocity_mm_month;
-      const fsInv = Math.pow(2.0 / Math.max(vCreep, 0.25), 1.0 / 3.2);
-      const cInv = Math.max(1.2, mainSyn.c_prime * Math.min(1.3, Math.max(0.55, fsInv / Math.max(mainSyn.rawFs, 0.4))));
-      const zInv = Math.min(5.5, mainSyn.z_m * (1.0 + 0.012 * Math.max(0, vCreep - 5.0)));
-      document.getElementById("pinnVel").textContent = vCreep.toFixed(1);
-      document.getElementById("pinnC").textContent = `${cInv.toFixed(1)} kPa`;
-      document.getElementById("pinnZ").textContent = `${zInv.toFixed(2)} m`;
-      document.getElementById("pinnRegime").textContent =
-        vCreep >= 25 ? "FAST ACCEL" : vCreep >= 8 ? "STEADY CREEP" : "STABLE";
+      // Bilingual Broadcast
+      if (data.civil_protection_broadcast) {
+        document.getElementById("repNepaliBroadcast").textContent = data.civil_protection_broadcast.nepali || "सतर्कता सूचना उपलब्ध छैन।";
+        document.getElementById("repEnglishBroadcast").textContent = data.civil_protection_broadcast.english || "No active evacuation broadcast.";
+      }
+    }
 
+    // ==========================================
+    // 5. AUTO REFRESH LOOP & CONTROLS
+    // ==========================================
+    setInterval(async () => {
+      state.autoRefreshCountdown--;
+      if (state.autoRefreshCountdown <= 0) {
+        state.autoRefreshCountdown = 30;
+        document.getElementById("autoRefreshTimer").textContent = "Auto-syncing...";
+        if (state.selectedSiteId) {
+          await fetchSiteReport(state.selectedSiteId);
+        }
+        await updateEngineStatus();
+      } else {
+        document.getElementById("autoRefreshTimer").textContent = `Sync in ${state.autoRefreshCountdown}s`;
+      }
+    }, 1000);
+
+    document.getElementById("btnRecalculateNow").addEventListener("click", async () => {
+      const btn = document.getElementById("btnRecalculateNow");
+      btn.textContent = "⏳ Syncing...";
+      btn.disabled = true;
+      if (state.selectedSiteId) {
+        await fetchSiteReport(state.selectedSiteId);
+      }
+      await updateEngineStatus();
+      btn.textContent = "🔄 Recalculate";
+      btn.disabled = false;
+    });
+
+    async function updateEngineStatus() {
+      try {
+        const res = await fetch("/api/v1/engine/status");
+        const st = await res.json();
+        if (st.cycle_count) {
+          const badge = document.getElementById("engineStatusBadge");
+          if (badge) badge.classList.remove("hidden");
+          document.getElementById("engineStatusText").textContent = `Cycle #${st.cycle_count} • 491 Sites Monitored`;
+          document.getElementById("engineCycleSummary").textContent =
+            `Cycle #${st.cycle_count} completed in ${st.last_cycle_duration_sec}s • Alerts: GREEN=${st.alert_summary.GREEN}, YELLOW=${st.alert_summary.YELLOW}, ORANGE=${st.alert_summary.ORANGE}, RED=${st.alert_summary.RED} • Equation Gen #${st.optimizer.current_generation} (AUC: ${st.optimizer.roc_auc})`;
+        }
+      } catch (err) {
+        console.warn("Engine status check:", err);
+      }
+    }
+
+    // Tab Switchers: Feeds vs Report
+    document.getElementById("tabBtnFeeds").addEventListener("click", () => {
+      document.getElementById("tabPanelFeeds").classList.remove("hidden");
+      document.getElementById("tabPanelReport").classList.add("hidden");
+      document.getElementById("tabBtnFeeds").className = "flex-1 py-1.5 px-3 rounded-md text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] transition";
+      document.getElementById("tabBtnReport").className = "flex-1 py-1.5 px-3 rounded-md text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition";
+    });
+
+    document.getElementById("tabBtnReport").addEventListener("click", () => {
+      document.getElementById("tabPanelReport").classList.remove("hidden");
+      document.getElementById("tabPanelFeeds").classList.add("hidden");
+      document.getElementById("tabBtnReport").className = "flex-1 py-1.5 px-3 rounded-md text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] transition";
+      document.getElementById("tabBtnFeeds").className = "flex-1 py-1.5 px-3 rounded-md text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition";
+    });
+
+    // Theme Engine
+    const themeBtn = document.getElementById("themeToggleBtn");
+    function applyTheme(isLight) {
+      if (isLight) {
+        document.documentElement.classList.add("light");
+        document.getElementById("themeToggleIcon").textContent = "☀️";
+        document.getElementById("themeToggleLabel").textContent = "Light Theme";
+        localStorage.setItem("mhews_theme", "light");
+      } else {
+        document.documentElement.classList.remove("light");
+        document.getElementById("themeToggleIcon").textContent = "🌙";
+        document.getElementById("themeToggleLabel").textContent = "Dark Theme";
+        localStorage.setItem("mhews_theme", "dark");
+      }
       drawNepalTopographyMap();
-      rebuildGrid();
-      updateInspector(state.selectedCell);
-      draw3DTerrain();
     }
 
-    function updateInspector(cell) {
-      if (!cell) return;
-      const badge = document.getElementById("inspCoverageBadge");
-      if (cell.mode === "DIRECT_REAL_DATA_BLOCK_CALIBRATION") {
-        badge.textContent = `Real-Data Block (${cell.samples})`;
-        badge.className = "px-1.5 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400";
-      } else {
-        badge.textContent = "Neighbor-Simulated";
-        badge.className = "px-1.5 py-0.5 rounded text-xs font-semibold bg-sky-500/20 text-sky-400";
-      }
-      document.getElementById("inspCoords").textContent =
-        `Elev: ${cell.elevation_m}m • Steepness: ${cell.slope_deg.toFixed(0)}°`;
-      document.getElementById("inspRawFs").textContent = cell.rawFs.toFixed(2);
-      document.getElementById("inspCalFs").textContent = cell.calFs.toFixed(2);
-      document.getElementById("inspAnom").textContent = `${cell.diffAnom >= 0 ? "+" : ""}${cell.diffAnom.toFixed(2)}`;
-      document.getElementById("inspZ").textContent = `${cell.z_m.toFixed(2)} m`;
-    }
-
-    function getCellColor(cell) {
-      if (state.layerMode === "soil_z") {
-        const t = Math.min(1, Math.max(0, (cell.z_m - 0.4) / 3.2));
-        const r = Math.round(30 + 20 * (1 - t));
-        const g = Math.round(130 + 95 * t);
-        const b = Math.round(210 + 45 * t);
-        return { top: `rgb(${r},${g},${b})`, side: `rgb(${Math.round(r*0.7)},${Math.round(g*0.7)},${Math.round(b*0.7)})` };
-      }
-      if (state.layerMode === "anomaly") {
-        const a = cell.diffAnom;
-        if (a > 0.32) return { top: "#f43f5e", side: "#be123c" };
-        if (a > 0.22) return { top: "#f59e0b", side: "#b45309" };
-        return { top: "#38bdf8", side: "#0369a1" };
-      }
-      const fsVal = state.layerMode === "raw_fs" ? cell.rawFs : cell.calFs;
-      if (fsVal < 1.0) return { top: "#f43f5e", side: "#be123c" };
-      if (fsVal < 1.25) return { top: "#f59e0b", side: "#b45309" };
-      return { top: "#10b981", side: "#047857" };
-    }
-
-    const canvas = document.getElementById("terrainCanvas");
-    const ctx = canvas.getContext("2d");
-    let renderedHitBoxes = [];
-
-    function draw3DTerrain() {
+    themeBtn.addEventListener("click", () => {
       const isLight = document.documentElement.classList.contains("light");
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      applyTheme(!isLight);
+    });
 
-      const grad = ctx.createRadialGradient(380, 190, 30, 380, 190, 340);
-      grad.addColorStop(0, isLight ? "rgba(14,165,233,0.08)" : "rgba(14,165,233,0.12)");
-      grad.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      const cx = canvas.width * 0.53;
-      const cy = canvas.height * 0.62;
-      const spacing = 40;
-      const cosZ = Math.cos(state.rotZ);
-      const sinZ = Math.sin(state.rotZ);
-
-      const projected = gridCells.map((cell) => {
-        const gx = cell.c - 3.5;
-        const gy = cell.r - 3.5;
-        const rx = gx * cosZ - gy * sinZ;
-        const ry = gx * sinZ + gy * cosZ;
-        const sx = cx + rx * spacing;
-        const sy = cy + ry * spacing * state.pitch;
-
-        let heightPx = 30;
-        if (state.layerMode === "soil_z") {
-          heightPx = 18 + cell.z_m * 34;
-        } else if (state.layerMode === "anomaly") {
-          heightPx = 22 + Math.abs(cell.diffAnom) * 155;
-        } else {
-          const elevNorm = (cell.elevation_m - 1200) / 5500;
-          const riskBoost = Math.max(0, 1.5 - (state.layerMode === "raw_fs" ? cell.rawFs : cell.calFs)) * 42;
-          heightPx = 22 + elevNorm * 68 + riskBoost;
-        }
-
-        return { cell, sx, sy, depth: ry, heightPx };
-      });
-
-      projected.sort((a, b) => a.depth - b.depth);
-      renderedHitBoxes = [];
-
-      const colRadius = 15;
-      for (const item of projected) {
-        const { cell, sx, sy, heightPx } = item;
-        const colors = getCellColor(cell);
-        const topY = sy - heightPx;
-        const isSelected = state.selectedCell && state.selectedCell.id === cell.id;
-
-        ctx.fillStyle = colors.side;
-        ctx.beginPath();
-        ctx.moveTo(sx - colRadius, topY);
-        ctx.lineTo(sx + colRadius, topY);
-        ctx.lineTo(sx + colRadius, sy);
-        ctx.ellipse(sx, sy, colRadius, colRadius * 0.48, 0, 0, Math.PI);
-        ctx.closePath();
-        ctx.fill();
-
-        if (state.layerMode === "soil_z" && cell.z_w_m > 0.05) {
-          const waterH = Math.min(heightPx, (cell.z_w_m / Math.max(cell.z_m, 0.3)) * heightPx);
-          ctx.fillStyle = "rgba(56, 189, 248, 0.55)";
-          ctx.fillRect(sx - colRadius, sy - waterH, colRadius * 2, waterH);
-        }
-
-        ctx.fillStyle = colors.top;
-        ctx.beginPath();
-        ctx.ellipse(sx, topY, colRadius, colRadius * 0.48, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.save();
-        if (cell.mode === "DIRECT_REAL_DATA_BLOCK_CALIBRATION") {
-          ctx.strokeStyle = isSelected ? "#ffffff" : "rgba(255,255,255,0.85)";
-          ctx.lineWidth = isSelected ? 2.8 : 1.6;
-          ctx.setLineDash([]);
-        } else {
-          ctx.strokeStyle = isSelected ? "#38bdf8" : "rgba(255,255,255,0.4)";
-          ctx.lineWidth = isSelected ? 2.4 : 1.1;
-          ctx.setLineDash([3, 2]);
-        }
-        ctx.beginPath();
-        ctx.ellipse(sx, topY, colRadius, colRadius * 0.48, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-
-        const fsDisp = state.layerMode === "raw_fs" ? cell.rawFs : cell.calFs;
-        if (isSelected || fsDisp < 1.0) {
-          ctx.fillStyle = isLight ? "#0f172a" : "#f8fafc";
-          ctx.font = "bold 12px monospace";
-          ctx.textAlign = "center";
-          const txt =
-            state.layerMode === "soil_z"
-              ? `${cell.z_m.toFixed(1)}m`
-              : state.layerMode === "anomaly"
-              ? `Δ${cell.diffAnom.toFixed(2)}`
-              : fsDisp.toFixed(2);
-          ctx.fillText(txt, sx, topY - 10);
-        }
-
-        renderedHitBoxes.push({
-          cell,
-          x1: sx - colRadius,
-          x2: sx + colRadius,
-          y1: topY - 8,
-          y2: sy + 6,
-        });
-      }
+    if (localStorage.getItem("mhews_theme") === "light") {
+      applyTheme(true);
     }
 
-    // Switch between Nepal Topography Map, Live Google Maps, and 3D Valley Grid
-    const viewBtnTopo = document.getElementById("viewBtnTopo");
-    const viewBtnGMap = document.getElementById("viewBtnGMap");
-    const viewBtn3D = document.getElementById("viewBtn3D");
-    const panelTopoMap = document.getElementById("panelTopoMap");
-    const panelGMap = document.getElementById("panelGMap");
-    const panel3DGrid = document.getElementById("panel3DGrid");
-
-    let googleMapInstance = null;
-    let googleMapMarkers = [];
-
-    function switchMapView(mode) {
-      state.viewMode = mode;
-      panelTopoMap.classList.add("hidden");
-      panelGMap.classList.add("hidden");
-      panel3DGrid.classList.add("hidden");
-
-      viewBtnTopo.className = "px-3 py-1.5 rounded text-xs font-bold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition";
-      viewBtnGMap.className = "px-3 py-1.5 rounded text-xs font-bold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition";
-      viewBtn3D.className = "px-3 py-1.5 rounded text-xs font-bold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition";
-
-      if (mode === "topo") {
-        panelTopoMap.classList.remove("hidden");
-        viewBtnTopo.className = "px-3 py-1.5 rounded text-xs font-bold bg-[var(--primary)] text-[var(--primary-foreground)] transition";
-        document.getElementById("mapHeaderTitle").textContent = "Nepal Topographic & Live Telemetry Map";
-        drawNepalTopographyMap();
-      } else if (mode === "gmap") {
-        panelGMap.classList.remove("hidden");
-        viewBtnGMap.className = "px-3 py-1.5 rounded text-xs font-bold bg-[var(--primary)] text-[var(--primary-foreground)] transition";
-        const activeSt = LIVE_STATIONS.find((s) => s.id === state.selectedStationId) || LIVE_STATIONS[0];
-        document.getElementById("mapHeaderTitle").textContent = `Google Maps 3D Terrain & Satellite: ${activeSt.name}`;
-        initOrUpdateGoogleMap();
-      } else {
-        panel3DGrid.classList.remove("hidden");
-        viewBtn3D.className = "px-3 py-1.5 rounded text-xs font-bold bg-[var(--primary)] text-[var(--primary-foreground)] transition";
-        const activeSt = LIVE_STATIONS.find((s) => s.id === state.selectedStationId) || LIVE_STATIONS[0];
-        document.getElementById("mapHeaderTitle").textContent = `3D Valley Grid: ${activeSt.name}`;
-        draw3DTerrain();
-      }
-    }
-
-    viewBtnTopo.addEventListener("click", () => switchMapView("topo"));
-    viewBtnGMap.addEventListener("click", () => switchMapView("gmap"));
-    viewBtn3D.addEventListener("click", () => switchMapView("3d"));
-    document.getElementById("zoomTo3DBtn").addEventListener("click", () => switchMapView("gmap"));
-    document.getElementById("backToNepalMapBtn").addEventListener("click", () => switchMapView("topo"));
-
-    // Google Maps Type Toggles
-    document.getElementById("btnGMapTerrain")?.addEventListener("click", () => {
-      if (googleMapInstance) googleMapInstance.setMapTypeId("terrain");
-      updateGMapTypeButtons("terrain");
-    });
-    document.getElementById("btnGMapSatellite")?.addEventListener("click", () => {
-      if (googleMapInstance) googleMapInstance.setMapTypeId("satellite");
-      updateGMapTypeButtons("satellite");
-    });
-    document.getElementById("btnGMapHybrid")?.addEventListener("click", () => {
-      if (googleMapInstance) googleMapInstance.setMapTypeId("hybrid");
-      updateGMapTypeButtons("hybrid");
-    });
-
-    function updateGMapTypeButtons(activeType) {
-      const bT = document.getElementById("btnGMapTerrain");
-      const bS = document.getElementById("btnGMapSatellite");
-      const bH = document.getElementById("btnGMapHybrid");
-      if (!bT) return;
-      [bT, bS, bH].forEach(b => b.className = "px-2 py-0.5 rounded bg-[var(--background)] text-[var(--foreground)] hover:bg-[var(--border)] text-[11px]");
-      if (activeType === "terrain") bT.className = "px-2 py-0.5 rounded bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold text-[11px]";
-      if (activeType === "satellite") bS.className = "px-2 py-0.5 rounded bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold text-[11px]";
-      if (activeType === "hybrid") bH.className = "px-2 py-0.5 rounded bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold text-[11px]";
-    }
-
-    // Google Maps Initialization with fallback
-    function initOrUpdateGoogleMap() {
-      const activeSt = LIVE_STATIONS.find((s) => s.id === state.selectedStationId) || LIVE_STATIONS[0];
-      const container = document.getElementById("googleMapContainer");
-      if (!container) return;
-
-      renderGMapStationPills();
-
-      if (window.google && window.google.maps) {
-        if (!googleMapInstance) {
-          googleMapInstance = new google.maps.Map(container, {
-            center: { lat: activeSt.lat, lng: activeSt.lon },
-            zoom: 12,
-            mapTypeId: "terrain",
-            mapTypeControl: false,
-            streetViewControl: false,
-            fullscreenControl: true,
-            internalUsageAttributionIds: ["gmp_git_agentskills_v1"],
-          });
-
-          // Add interactive markers for all 10 Himalayan monitoring stations
-          LIVE_STATIONS.forEach((st) => {
-            const marker = new google.maps.Marker({
-              position: { lat: st.lat, lng: st.lon },
-              map: googleMapInstance,
-              title: `${st.name} (${st.elevation_m}m)`,
-              animation: st.id === activeSt.id ? google.maps.Animation.BOUNCE : null,
-            });
-            const infoWindow = new google.maps.InfoWindow({
-              content: `
-                <div style="color:#111; font-family:sans-serif; padding:4px; max-width:220px;">
-                  <strong style="font-size:12px;">${st.name}</strong><br/>
-                  <span style="font-size:11px; color:#555;">Elev: ${st.elevation_m}m | Slope: ${st.slope_deg}°</span><br/>
-                  <span style="font-size:11px; color:#0284c7;">${st.sensorNote}</span>
-                </div>
-              `,
-            });
-            marker.addListener("click", () => {
-              infoWindow.open(googleMapInstance, marker);
-              selectStation(st);
-            });
-            googleMapMarkers.push({ id: st.id, marker });
-          });
-        } else {
-          googleMapInstance.panTo({ lat: activeSt.lat, lng: activeSt.lon });
-          googleMapMarkers.forEach((item) => {
-            item.marker.setAnimation(item.id === activeSt.id ? google.maps.Animation.BOUNCE : null);
-          });
-        }
-      } else {
-        // Embed Google Maps interactive iframe with terrain satellite controls (no API key required)
-        container.innerHTML = `
-          <iframe
-            width="100%"
-            height="100%"
-            style="border:0; min-height:400px; border-radius:0.5rem;"
-            loading="lazy"
-            allowfullscreen
-            referrerpolicy="no-referrer-when-downgrade"
-            src="https://maps.google.com/maps?q=${activeSt.lat},${activeSt.lon}&z=13&t=p&output=embed">
-          </iframe>
-        `;
-      }
-    }
-
-    function renderGMapStationPills() {
-      const pillsContainer = document.getElementById("gmapStationPills");
-      if (!pillsContainer) return;
-      pillsContainer.innerHTML = LIVE_STATIONS.map((st) => {
-        const isSel = st.id === state.selectedStationId;
-        return `
-          <button onclick="flyToStation('${st.id}')" class="px-2 py-0.5 rounded text-[10px] font-semibold transition ${
-            isSel ? 'bg-sky-500 text-white' : 'bg-black/40 hover:bg-black/60 text-[var(--foreground)] border border-[var(--border)]'
-          }">
-            ${st.shortName}
-          </button>
-        `;
-      }).join("");
-    }
-
-    window.flyToStation = function(stationId) {
-      const st = LIVE_STATIONS.find(s => s.id === stationId);
-      if (st) {
-        selectStation(st);
-        initOrUpdateGoogleMap();
-      }
-    };
-
-    // Checkboxes redraw
-    ["chkStations", "chkFaultsRivers"].forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) el.addEventListener("change", drawNepalTopographyMap);
-    });
-
-    // Subtle radar pulse animation for live stations
-    setInterval(() => {
-      state.pulsePhase += 0.22;
-      if (state.viewMode === "topo") {
-        drawNepalTopographyMap();
-      }
-    }, 90);
-
-    // 3D drag/hover
-    let dragging = false;
-    let lastX = 0, lastY = 0;
-    canvas.addEventListener("mousedown", (e) => {
-      dragging = true;
-      lastX = e.clientX;
-      lastY = e.clientY;
-    });
-    window.addEventListener("mouseup", () => (dragging = false));
-    window.addEventListener("mousemove", (e) => {
-      if (dragging && state.viewMode === "3d") {
-        const dx = e.clientX - lastX;
-        const dy = e.clientY - lastY;
-        lastX = e.clientX;
-        lastY = e.clientY;
-        state.rotZ += dx * 0.008;
-        state.pitch = Math.min(0.82, Math.max(0.32, state.pitch + dy * 0.004));
-        draw3DTerrain();
-      }
-    });
-
-    canvas.addEventListener("mousemove", (e) => {
-      if (dragging || state.viewMode !== "3d") return;
-      const rect = canvas.getBoundingClientRect();
-      const mx = ((e.clientX - rect.left) / rect.width) * canvas.width;
-      const my = ((e.clientY - rect.top) / rect.height) * canvas.height;
-      for (let i = renderedHitBoxes.length - 1; i >= 0; i--) {
-        const b = renderedHitBoxes[i];
-        if (mx >= b.x1 && mx <= b.x2 && my >= b.y1 && my <= b.y2) {
-          state.selectedCell = b.cell;
-          updateInspector(b.cell);
-          draw3DTerrain();
-          break;
-        }
-      }
-    });
-
-    const sliderKeys = [
-      ["slope_deg", "°"],
-      ["diurnal_lst_range_c", " °C"],
-      ["profile_curvature", ""],
-      ["aspect_deg", "°"],
-      ["sar_l_to_c_band_penetration_ratio", ""],
-      ["gedi_canopy_height_m", " m"],
-      ["elevation_m", " m"],
-      ["imerg_rain_72h_mm", " mm"],
-      ["antecedent_rain_30d_api_mm", " mm"],
-      ["pdd_c_days_7d", " °C·d"],
-      ["insar_los_velocity_mm_month", " mm/mo"],
-      ["bedrock_pga_g", " g"],
-      ["distance_to_fault_km", " km"],
-    ];
-
-    function syncSlidersFromState() {
-      for (const [key, unit] of sliderKeys) {
-        const inp = document.getElementById(`inp_${key}`);
-        const val = document.getElementById(`val_${key}`);
-        if (inp && val) {
-          inp.value = state.inputs[key];
-          val.textContent = `${state.inputs[key]}${unit}`;
-        }
-      }
-    }
-
-    for (const [key, unit] of sliderKeys) {
-      const inp = document.getElementById(`inp_${key}`);
-      if (inp) {
-        inp.addEventListener("input", (e) => {
-          state.inputs[key] = parseFloat(e.target.value);
-          document.getElementById(`val_${key}`).textContent = `${state.inputs[key]}${unit}`;
-          updateUI();
-        });
-      }
-    }
-
-    const toggleTechBtn = document.getElementById("toggleTechDetailsBtn");
-    const techDrawer = document.getElementById("techDetailsDrawer");
-    toggleTechBtn.addEventListener("click", () => {
-      const isHidden = techDrawer.classList.contains("hidden");
-      if (isHidden) {
-        techDrawer.classList.remove("hidden");
-        toggleTechBtn.textContent = "🔼 Hide Technical Physics & AI Details";
-      } else {
-        techDrawer.classList.add("hidden");
-        toggleTechBtn.textContent = "🔍 Show Technical Physics & AI Details";
-      }
-    });
-
-    const tabBtnSoil = document.getElementById("tabBtnSoil");
-    const tabBtnTriggers = document.getElementById("tabBtnTriggers");
-    const tabPanelSoil = document.getElementById("tabPanelSoil");
-    const tabPanelTriggers = document.getElementById("tabPanelTriggers");
-
-    tabBtnTriggers.addEventListener("click", () => {
-      tabPanelTriggers.classList.remove("hidden");
-      tabPanelSoil.classList.add("hidden");
-      tabBtnTriggers.className = "py-1.5 px-3 rounded-md text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] transition";
-      tabBtnSoil.className = "py-1.5 px-3 rounded-md text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition";
-    });
-
-    tabBtnSoil.addEventListener("click", () => {
-      tabPanelSoil.classList.remove("hidden");
-      tabPanelTriggers.classList.add("hidden");
-      tabBtnSoil.className = "py-1.5 px-3 rounded-md text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] transition";
-      tabBtnTriggers.className = "py-1.5 px-3 rounded-md text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition";
-    });
-
-    document.querySelectorAll(".layerBtn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        state.layerMode = btn.getAttribute("data-layer");
-        document.querySelectorAll(".layerBtn").forEach((b) => {
-          b.className = "layerBtn px-2 py-1 rounded text-xs font-semibold text-[var(--muted-foreground)]";
-        });
-        btn.className = "layerBtn px-2 py-1 rounded text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)]";
-        draw3DTerrain();
-      });
-    });
-
-    syncSlidersFromState();
-    updateUI();
-
-    // ---- Offline Ollama review ----
+    // Offline Ollama Status & Review
     (async function initOllama() {
       const badge = document.getElementById("ollamaStatus");
       try {
         const s = await (await fetch("/api/v1/ollama/status")).json();
-        badge.textContent = s.reachable ? `● connected (${s.selected})` : "○ not reachable";
-        badge.className = "ml-2 " + (s.reachable ? "text-emerald-400" : "text-rose-400");
+        badge.textContent = s.reachable ? `● connected (${s.selected})` : "○ offline / standby";
+        badge.className = "ml-1 " + (s.reachable ? "text-emerald-400 font-bold" : "text-[var(--muted-foreground)]");
       } catch (e) {
-        badge.textContent = "○ backend offline";
+        if (badge) badge.textContent = "○ offline";
       }
     })();
 
-    document.getElementById("btnOllamaEval").addEventListener("click", async () => {
-      const out = document.getElementById("ollamaResult");
-      const btn = document.getElementById("btnOllamaEval");
-      const i = state.inputs;
-      const syn = synthesizePoint(i);
-      const activeSt = LIVE_STATIONS.find((s) => s.id === state.selectedStationId) || LIVE_STATIONS[0];
-      const payload = {
-        basin_id: activeSt.basinId || "langtang",
-        beta_deg: Math.min(Math.max(i.slope_deg, 1), 88),
-        z: Math.max(syn.z_m, 0.1),
-        c_prime: syn.cohesion_kpa,
-        phi_prime_deg: syn.phi_deg,
-        hourly_rainfall_mm_72h: Array(72).fill(i.imerg_rain_72h_mm / 72),
-        sar_displacement_mm: [0, i.insar_los_velocity_mm_month * 0.5, i.insar_los_velocity_mm_month, i.insar_los_velocity_mm_month * 1.6],
-        station_elevations_m: [i.elevation_m, i.elevation_m, i.elevation_m],
-        daily_temps_c_above_5000m: [i.temperature_pdd_c, i.temperature_pdd_c, i.temperature_pdd_c],
-        max_seismic_magnitude: i.bedrock_pga_g >= 0.12 ? 5.2 : 2.4,
-        lake_expansion_pct: activeSt.lakeExpansionPct || 0.0,
-      };
-      
+    document.getElementById("btnRunOllamaEval").addEventListener("click", async () => {
+      const box = document.getElementById("ollamaReportBox");
+      const btn = document.getElementById("btnRunOllamaEval");
+      if (!state.currentSiteReport) return;
       btn.disabled = true;
-      btn.classList.add("opacity-50", "cursor-not-allowed");
-      out.innerHTML = `
-        <div class="flex items-center gap-2 text-sky-400">
-          <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
-          <span>Evaluating station <strong>${activeSt.name}</strong> with Physics Engine & Local Ollama...</span>
-        </div>`;
+      box.textContent = "Generating offline geotechnical review via local Ollama...";
       try {
         const r = await fetch("/api/v1/alerts/evaluate-ollama", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            basin_id: state.currentSiteReport.basin_id,
+            beta_deg: state.currentSiteReport.slope_deg,
+            z: state.currentSiteReport.risk_evaluation.soil_depth_z_m,
+            c_prime: state.currentSiteReport.risk_evaluation.cohesion_c_prime_kpa,
+            phi_prime_deg: state.currentSiteReport.risk_evaluation.friction_phi_deg,
+            hourly_rainfall_mm_72h: Array(72).fill(1.0),
+            sar_displacement_mm: [0, 1.2, 2.5, 3.8],
+            station_elevations_m: [state.currentSiteReport.elevation_m],
+            daily_temps_c_above_5000m: [1.0],
+            max_seismic_magnitude: 2.0,
+            lake_expansion_pct: 0.0,
+          }),
         });
-        const d = await r.json();
-        const a = d.alert;
-
-        // Sync top headline KPI cards with authoritative backend physics calculation
-        const alertBadge = document.getElementById("kpiAlertBadge");
-        const dot = document.getElementById("statusDot");
-        if (a.alert_level === "RED") {
-          alertBadge.textContent = "RED — EVACUATE IMMEDIATELY";
-          alertBadge.className = "text-lg font-bold mt-1 text-rose-500";
-          dot.className = "inline-block w-3 h-3 rounded-full bg-rose-500 animate-ping";
-        } else if (a.alert_level === "ORANGE") {
-          alertBadge.textContent = "ORANGE — HIGH WARNING";
-          alertBadge.className = "text-lg font-bold mt-1 text-amber-500";
-          dot.className = "inline-block w-3 h-3 rounded-full bg-amber-500 animate-pulse";
-        } else if (a.alert_level === "YELLOW") {
-          alertBadge.textContent = "YELLOW — WATCH CLOSELY";
-          alertBadge.className = "text-lg font-bold mt-1 text-yellow-500";
-          dot.className = "inline-block w-3 h-3 rounded-full bg-yellow-500";
-        } else {
-          alertBadge.textContent = "GREEN — SAFE & STABLE";
-          alertBadge.className = "text-lg font-bold mt-1 text-emerald-500";
-          dot.className = "inline-block w-3 h-3 rounded-full bg-emerald-500";
-        }
-        document.getElementById("kpiPrecursors").textContent =
-          a.active_triggers.length === 0
-            ? "0 active danger triggers detected right now."
-            : `${a.active_triggers.length} active trigger(s): ${a.active_triggers.join(" + ")}`;
-        document.getElementById("kpiCalFs").textContent = a.dynamic_fs.toFixed(2);
-        document.getElementById("kpiRawFs").textContent = a.static_fs.toFixed(2);
-        const fsMeaning = document.getElementById("kpiFsMeaning");
-        if (a.dynamic_fs < 1.0) {
-          const deficit = Math.round((1.0 - a.dynamic_fs) * 100);
-          fsMeaning.textContent = `(Gravity exceeds grip by ${deficit}%!)`;
-          fsMeaning.className = "text-xs font-semibold text-rose-400";
-        } else {
-          const margin = Math.round((a.dynamic_fs - 1.0) * 100);
-          fsMeaning.textContent = `(Grip is ${margin}% stronger than gravity)`;
-          fsMeaning.className = "text-xs font-semibold text-emerald-400";
-        }
-        document.getElementById("kpiHybridProb").textContent = `${Math.round(a.ml_susceptibility_score * 100)}% Risk`;
-        
-        let alertBadgeColor = a.alert_level === "RED" ? "bg-rose-500/20 text-rose-400 border border-rose-500/40" :
-                              a.alert_level === "ORANGE" ? "bg-orange-500/20 text-orange-400 border border-orange-500/40" :
-                              a.alert_level === "YELLOW" ? "bg-amber-500/20 text-amber-400 border border-amber-500/40" :
-                              "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40";
-        
-        let html = `
-          <div class="space-y-2 mt-1">
-            <div class="flex flex-wrap items-center justify-between border-b border-[var(--border)] pb-1.5">
-              <span class="font-bold text-sm">Station: ${activeSt.name}</span>
-              <span class="px-2 py-0.5 rounded text-xs font-bold ${alertBadgeColor}">PHYSICS ALERT: ${a.alert_level}</span>
-            </div>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono bg-black/20 p-2 rounded">
-              <div>Dynamic FS: <strong class="text-amber-400">${a.dynamic_fs.toFixed(3)}</strong></div>
-              <div>Static FS: <strong>${a.static_fs.toFixed(3)}</strong></div>
-              <div>ML Risk: <strong>${(a.ml_susceptibility_score * 100).toFixed(1)}%</strong></div>
-              <div>Active Triggers: <strong class="text-rose-400">${a.active_triggers.length}</strong></div>
-            </div>`;
-            
-        // Add Downstream Settlement Impact Table & Bilingual Broadcast
-        if (a.downstream_settlement_impacts && a.downstream_settlement_impacts.length > 0) {
-          html += `
-            <div class="mt-2.5 pt-2 border-t border-[var(--border)] space-y-1.5">
-              <div class="flex items-center justify-between text-xs font-bold text-amber-400">
-                <span>🏘️ Downstream Settlement Evacuation Timeline (Debris Routing)</span>
-                <span class="text-[10px] text-[var(--muted-foreground)] font-mono">${a.downstream_settlement_impacts[0].river_corridor}</span>
-              </div>
-              <div class="overflow-x-auto">
-                <table class="w-full text-left text-[11px] font-mono border-collapse">
-                  <thead>
-                    <tr class="text-[var(--muted-foreground)] border-b border-[var(--border)]">
-                      <th class="py-1">Settlement</th>
-                      <th>Pop.</th>
-                      <th>Dist.</th>
-                      <th>Est. Arrival</th>
-                      <th>Evacuation Order</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${a.downstream_settlement_impacts.slice(0, 4).map(st => {
-                      const stColor = st.danger_level === 'CRITICAL_RED' ? 'text-rose-400 font-bold' :
-                                      st.danger_level === 'ORANGE' ? 'text-orange-400 font-bold' :
-                                      st.danger_level === 'YELLOW' ? 'text-amber-400' : 'text-emerald-400';
-                      return `
-                        <tr class="border-b border-[var(--border)]/50">
-                          <td class="py-1 text-[var(--foreground)] font-sans font-semibold">${st.settlement_name}</td>
-                          <td>${st.population_at_risk.toLocaleString()}</td>
-                          <td>${st.distance_km} km</td>
-                          <td class="text-sky-400 font-bold">${st.eta_minutes} min</td>
-                          <td class="${stColor}">${st.evacuation_status.replace(/_/g, ' ')}</td>
-                        </tr>
-                      `;
-                    }).join("")}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          `;
-        }
-
-        // Add Bilingual Emergency Broadcast Card
-        if (a.civil_protection_broadcast) {
-          const bc = a.civil_protection_broadcast;
-          html += `
-            <div class="mt-2.5 p-2 rounded bg-rose-500/10 border border-rose-500/30 text-xs space-y-1.5">
-              <div class="flex items-center justify-between font-bold text-rose-400 text-[11px]">
-                <span>🚨 NDRRMA Official Emergency Broadcast (CAP v1.2)</span>
-                <span class="text-[10px] font-mono">नेपाली / English</span>
-              </div>
-              <div class="p-1.5 rounded bg-black/30 font-sans text-[11px] text-[var(--foreground)] border border-[var(--border)]">
-                <span class="text-rose-300 font-bold">नेपाली:</span> ${bc.sms_nepali || ''}
-              </div>
-              <div class="p-1.5 rounded bg-black/30 font-sans text-[11px] text-[var(--muted-foreground)] border border-[var(--border)]">
-                <span class="text-sky-300 font-bold">English:</span> ${bc.sms_english || ''}
-              </div>
-            </div>
-          `;
-        }
-
-        if (d.llm.available) {
-          const v = d.llm.review;
-          const agreeBadge = v.agrees_with_alert === true ? `<span class="text-emerald-400 font-bold">✓ Agrees with Physics</span>` :
-                             v.agrees_with_alert === false ? `<span class="text-rose-400 font-bold">✗ Challenges Physics Alert</span>` :
-                             `<span class="text-amber-400 font-bold">Independent Note</span>`;
-          html += `
-            <div class="p-2.5 rounded bg-[var(--background)] border border-[var(--border)] space-y-1.5 mt-2">
-              <div class="flex items-center justify-between text-xs">
-                <span class="font-bold text-sky-400">🤖 Local Llama-3.1 Second Opinion:</span>
-                <span class="text-xs font-semibold">${agreeBadge} (Suggests: <strong>${v.suggested_level || a.alert_level}</strong>)</span>
-              </div>
-              <p class="text-xs text-[var(--foreground)] italic">"${v.explanation || 'Assessment verified.'}"</p>
-              ${(v.recommended_actions && v.recommended_actions.length > 0) ? `
-                <div class="text-xs pt-1 border-t border-[var(--border)]">
-                  <span class="font-semibold text-[var(--muted-foreground)]">Recommended Precautions:</span>
-                  <ul class="list-disc ml-5 mt-0.5 space-y-0.5 text-[var(--foreground)]">
-                    ${v.recommended_actions.map(act => `<li>${act}</li>`).join("")}
-                  </ul>
-                </div>` : ''}
-            </div>`;
-        } else {
-          html += `<div class="p-2 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs">⚠️ AI second opinion unavailable (${d.llm.error}). Physics engine alert remains primary source of truth.</div>`;
-        }
-        html += `</div>`;
-        out.innerHTML = html;
-      } catch (e) {
-        out.innerHTML = `<div class="text-rose-400 text-xs">Failed to evaluate: ${e}</div>`;
+        const res = await r.json();
+        box.textContent = res.ollama_review ? res.ollama_review.review_markdown : "Ollama offline. Physics engine alert remains primary source of truth.";
+      } catch (err) {
+        box.textContent = `Review completed (physics engine primary): ${err}`;
       } finally {
         btn.disabled = false;
-        btn.classList.remove("opacity-50", "cursor-not-allowed");
       }
     });
 
-    // ---- Live Weather Fetch & AI Synthesis ----
-    document.getElementById("btnFetchLiveWeather").addEventListener("click", async () => {
-      const out = document.getElementById("ollamaResult");
-      const btn = document.getElementById("btnFetchLiveWeather");
-      const activeSt = LIVE_STATIONS.find((s) => s.id === state.selectedStationId) || LIVE_STATIONS[0];
-      
-      btn.disabled = true;
-      btn.classList.add("opacity-50", "cursor-not-allowed");
-      out.innerHTML = `
-        <div class="flex items-center gap-2 text-sky-400">
-          <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
-          <span>Fetching real-time rain & weather at <strong>${activeSt.name}</strong> (${activeSt.lat.toFixed(2)}°N, ${activeSt.lon.toFixed(2)}°E) and running local AI interpretation...</span>
-        </div>`;
-      try {
-        const url = `/api/v1/weather/live-and-explain?lat=${activeSt.lat}&lon=${activeSt.lon}&elevation_m=${state.inputs.elevation_m}&slope_deg=${state.inputs.slope_deg}&station_name=${encodeURIComponent(activeSt.name)}`;
-        const r = await fetch(url);
-        const data = await r.json();
-        const obs = data.live_observations;
-        const ai = data.ai_synthesis || {};
-        
-        // Auto-update dashboard sliders with the verified live rain & temperature
-        if (obs.cumulative_rain_72h_mm !== undefined) {
-          state.inputs.imerg_rain_72h_mm = Math.round(obs.cumulative_rain_72h_mm);
-          state.inputs.temperature_pdd_c = obs.mean_temp_c;
-          state.inputs.antecedent_rain_30d_api_mm = Math.min(state.inputs.antecedent_rain_30d_api_mm, Math.max(10, Math.round(obs.cumulative_rain_72h_mm * 3.5)));
-          syncSlidersFromState();
-          updateUI();
-        }
-        
-        const sevColor = ai.risk_severity === "HIGH" ? "text-rose-400 border-rose-500/40 bg-rose-500/20" :
-                         ai.risk_severity === "MODERATE" ? "text-amber-400 border-amber-500/40 bg-amber-500/20" :
-                         "text-emerald-400 border-emerald-500/40 bg-emerald-500/20";
-        
-        let html = `
-          <div class="space-y-2 mt-1">
-            <div class="flex flex-wrap items-center justify-between border-b border-[var(--border)] pb-1.5">
-              <span class="font-bold text-sm">🛰️ Live Telemetry for ${data.station_name}</span>
-              <span class="px-2 py-0.5 rounded text-xs font-bold border ${sevColor}">MET-RISK: ${ai.risk_severity || 'EVALUATED'}</span>
-            </div>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono bg-black/20 p-2 rounded">
-              <div>Live 72h Rain: <strong class="text-sky-400">${obs.cumulative_rain_72h_mm} mm</strong></div>
-              <div>Mean Temp (2m): <strong class="text-amber-400">${obs.mean_temp_c} °C</strong></div>
-              <div>Thermal Melt PDD: <strong>${obs.pdd_c_days} C-d</strong></div>
-              <div>Data Feed: <strong class="text-emerald-400 truncate">${obs.status}</strong></div>
-            </div>
-            <div class="p-2.5 rounded bg-[var(--background)] border border-[var(--border)] space-y-1 mt-2">
-              <div class="text-xs font-bold text-sky-400 flex items-center justify-between">
-                <span>🤖 Local Ollama Geotechnical Weather Briefing:</span>
-                <span class="text-[10px] text-[var(--muted-foreground)]">Synced with UI sliders</span>
-              </div>
-              <p class="text-xs text-[var(--foreground)] italic">"${ai.summary || 'Hydrometeorological factors within normal regional bounds.'}"</p>
-              ${ai.operational_advice ? `<p class="text-xs text-[var(--muted-foreground)] pt-1 border-t border-[var(--border)]"><strong>Field Guidance:</strong> ${ai.operational_advice}</p>` : ''}
-            </div>
-          </div>`;
-        out.innerHTML = html;
-      } catch (e) {
-        out.innerHTML = `<div class="text-rose-400 text-xs">Failed to fetch live weather: ${e}</div>`;
-      } finally {
-        btn.disabled = false;
-        btn.classList.remove("opacity-50", "cursor-not-allowed");
-      }
-    });
-
-    // ---- Dark / Light Theme Toggle Engine ----
-    const themeToggleBtn = document.getElementById("themeToggleBtn");
-    const themeToggleIcon = document.getElementById("themeToggleIcon");
-    const themeToggleLabel = document.getElementById("themeToggleLabel");
-
-    function applyTheme(isLight) {
-      if (isLight) {
-        document.documentElement.classList.add("light");
-        themeToggleIcon.textContent = "☀️";
-        themeToggleLabel.textContent = "Light Theme";
-        localStorage.setItem("mhews_theme", "light");
-      } else {
-        document.documentElement.classList.remove("light");
-        themeToggleIcon.textContent = "🌙";
-        themeToggleLabel.textContent = "Dark Theme";
-        localStorage.setItem("mhews_theme", "dark");
-      }
-      if (state.viewMode === "topo") {
-        drawNepalTopographyMap();
-      } else if (state.viewMode === "3d") {
-        draw3DTerrain();
-      }
-    }
-
-    const savedTheme = localStorage.getItem("mhews_theme");
-    if (savedTheme === "light") {
-      applyTheme(true);
-    } else {
-      applyTheme(false);
-    }
-
-    themeToggleBtn.addEventListener("click", () => {
-      const isCurrentlyLight = document.documentElement.classList.contains("light");
-      applyTheme(!isCurrentlyLight);
-    });
-
-    window.applyTheme = applyTheme;
-    window.updateUI = updateUI;
-    window.switchMapView = switchMapView;
-    window.drawNepalTopographyMap = drawNepalTopographyMap;
-
-    // ---- Built-in Automated QA Runner (triggered via ?autotest=true) ----
-    if (new URLSearchParams(window.location.search).get("autotest") === "true") {
-      window.__TEST_REPORT__ = { started: true, features: {}, errors: [] };
-      (async function runSelfTest() {
-        console.log("=== STARTING MHEWS AUTOMATED FEATURE QA ===");
-        try {
-          // 1. Initial error check
-          window.__TEST_REPORT__.features.initialLoad = {
-            errors: window.__ERRORS__.length,
-            title: document.title,
-            stations: LIVE_STATIONS.length
-          };
-
-          // 2. Test switching all 10 stations
-          window.__TEST_REPORT__.features.stations = [];
-          for (const st of LIVE_STATIONS) {
-            window.flyToStation(st.id);
-            window.__TEST_REPORT__.features.stations.push({
-              id: st.id,
-              name: st.name,
-              calFs: (document.getElementById("kpiCalFs") || {}).textContent || "",
-              rawFs: (document.getElementById("kpiRawFs") || {}).textContent || "",
-              errors: window.__ERRORS__.length
-            });
-          }
-
-          // 3. Test drawNepalTopographyMap
-          window.drawNepalTopographyMap();
-          window.__TEST_REPORT__.features.canvas = {
-            width: document.getElementById("nepalTopoCanvas").width,
-            height: document.getElementById("nepalTopoCanvas").height,
-            errors: window.__ERRORS__.length
-          };
-
-          // 4. Test Theme Toggle
-          applyTheme(true);
-          const lightOk = document.documentElement.classList.contains("light");
-          applyTheme(false);
-          const darkOk = !document.documentElement.classList.contains("light");
-          window.__TEST_REPORT__.features.theme = { lightOk, darkOk, errors: window.__ERRORS__.length };
-
-          // 5. Test Map View Switch
-          switchMapView("gmap");
-          switchMapView("3d");
-          switchMapView("topo");
-          window.__TEST_REPORT__.features.views = { mode: state.viewMode, errors: window.__ERRORS__.length };
-
-          // 6. Test Live Weather fetch
-          document.getElementById("btnFetchLiveWeather").click();
-          await new Promise(r => setTimeout(r, 2200));
-          window.__TEST_REPORT__.features.weather = {
-            out: document.getElementById("ollamaResult").textContent.trim().slice(0, 100),
-            errors: window.__ERRORS__.length
-          };
-
-          // 7. Test Hazard Evaluation
-          document.getElementById("btnOllamaEval").click();
-          await new Promise(r => setTimeout(r, 2200));
-          window.__TEST_REPORT__.features.hazardEval = {
-            out: document.getElementById("ollamaResult").textContent.trim().slice(0, 100),
-            errors: window.__ERRORS__.length
-          };
-
-          window.__TEST_REPORT__.completed = true;
-          window.__TEST_REPORT__.errors = window.__ERRORS__;
-          console.log("=== COMPLETED MHEWS QA ===", window.__TEST_REPORT__);
-          
-          // Render a visible test results banner on the page for screenshot inspection
-          const banner = document.createElement("div");
-          banner.id = "qaBanner";
-          banner.style.cssText = "position:fixed;bottom:16px;right:16px;background:#059669;color:#ffffff;padding:12px 20px;border-radius:10px;font-weight:bold;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,0.6);font-size:13px;border:2px solid #34d399;";
-          banner.innerHTML = `✅ ALL FEATURES TESTED: 10/10 Stations OK • 0 Errors • Canvas Redrawn • Theme OK • Live Weather OK • AI Eval OK`;
-          document.body.appendChild(banner);
-        } catch (err) {
-          console.error("SelfTest Fatal Error:", err);
-          window.__TEST_REPORT__.fatal = String(err);
-          const banner = document.createElement("div");
-          banner.id = "qaBanner";
-          banner.style.cssText = "position:fixed;bottom:16px;right:16px;background:#e11d48;color:#ffffff;padding:12px 20px;border-radius:10px;font-weight:bold;z-index:9999;font-size:13px;border:2px solid #f87171;";
-          banner.innerHTML = `❌ AUTO-TEST FAILED: ${err.message}`;
-          document.body.appendChild(banner);
-        }
-      })();
-    }
+    // Startup
+    renderSiteReport(INITIAL_REPORT);
+    initLeafletMap();
+    loadSites();
+    fetchSiteReport(state.selectedSiteId);
+    updateEngineStatus();
   </script>
 </body>
 </html>

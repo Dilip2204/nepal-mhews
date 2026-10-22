@@ -1,0 +1,150 @@
+{
+  "service": "Himalayan-MHEWS Perpetual Ingestion & Physics Engine",
+  "cycle_count": 1,
+  "uptime_seconds": 12.4,
+  "last_cycle_timestamp_utc": 1792698343.9784486,
+  "last_cycle_duration_sec": 12.39,
+  "monitored_sites_total": 491,
+  "alert_summary": {
+    "GREEN": 26,
+    "YELLOW": 24,
+    "ORANGE": 440,
+    "RED": 1
+  },
+  "latest_top_risk_sites": [
+    {
+      "site_id": "langtang_lirung",
+      "name": "Langtang Lirung & Kyangjin Radar",
+      "lat": 28.232,
+      "lon": 85.518,
+      "elev": 5680.0,
+      "slope": 46.0,
+      "cal_fs": 0.54,
+      "alert": "ORANGE",
+      "triggers": []
+    },
+    {
+      "site_id": "shalbachum_lake",
+      "name": "Shalbachum Glacial Lake (Rasuwa)",
+      "lat": 28.258,
+      "lon": 85.582,
+      "elev": 5380.0,
+      "slope": 43.0,
+      "cal_fs": 0.62,
+      "alert": "ORANGE",
+      "triggers": []
+    },
+    {
+      "site_id": "melamchi_pemdan",
+      "name": "Melamchi / Pemdan Moraine Gorge",
+      "lat": 28.034,
+      "lon": 85.562,
+      "elev": 4580.0,
+      "slope": 39.0,
+      "cal_fs": 0.63,
+      "alert": "ORANGE",
+      "triggers": []
+    },
+    {
+      "site_id": "birendra_tal",
+      "name": "Birendra Tal & Manaslu Icefall",
+      "lat": 28.596,
+      "lon": 84.636,
+      "elev": 4620.0,
+      "slope": 39.0,
+      "cal_fs": 0.63,
+      "alert": "RED",
+      "triggers": [
+        "CRITICAL_THERMAL_ICE_MELT"
+      ]
+    },
+    {
+      "site_id": "thulagi_dona",
+      "name": "Thulagi (Dona) Glacial Lake",
+      "lat": 28.538,
+      "lon": 84.485,
+      "elev": 5120.0,
+      "slope": 45.0,
+      "cal_fs": 0.62,
+      "alert": "ORANGE",
+      "triggers": []
+    },
+    {
+      "site_id": "philim_gorge",
+      "name": "Budhi Gandaki Philim Gorge Choke Point",
+      "lat": 28.315,
+      "lon": 84.725,
+      "elev": 2650.0,
+      "slope": 41.0,
+      "cal_fs": 0.69,
+      "alert": "ORANGE",
+      "triggers": []
+    },
+    {
+      "site_id": "seti_annapurna",
+      "name": "Seti Gorge / Annapurna IV Sabche Cirque",
+      "lat": 28.612,
+      "lon": 84.085,
+      "elev": 5420.0,
+      "slope": 48.0,
+      "cal_fs": 0.54,
+      "alert": "ORANGE",
+      "triggers": []
+    },
+    {
+      "site_id": "tsho_rolpa",
+      "name": "Tsho Rolpa Glacial Lake (Rolwaling)",
+      "lat": 27.862,
+      "lon": 86.476,
+      "elev": 5190.0,
+      "slope": 44.0,
+      "cal_fs": 0.67,
+      "alert": "ORANGE",
+      "triggers": []
+    },
+    {
+      "site_id": "imja_dig_tsho",
+      "name": "Imja Tsho & Dig Tsho (Everest)",
+      "lat": 27.901,
+      "lon": 86.936,
+      "elev": 5540.0,
+      "slope": 47.0,
+      "cal_fs": 0.6,
+      "alert": "ORANGE",
+      "triggers": []
+    },
+    {
+      "site_id": "lower_barun",
+      "name": "Lower Barun Glacial Lake (Sankhuwasabha)",
+      "lat": 27.798,
+      "lon": 87.092,
+      "elev": 4890.0,
+      "slope": 44.0,
+      "cal_fs": 0.64,
+      "alert": "ORANGE",
+      "triggers": []
+    }
+  ],
+  "optimizer": {
+    "current_generation": 6,
+    "active_fitness_score": 0.8841,
+    "holdout_recall_pct": 91.36,
+    "roc_auc": 0.9099,
+    "cryosphere_anchor_acc_pct": 93.6,
+    "avg_fs_deviation_pct": 28.79,
+    "last_promoted": false,
+    "last_reason": "Failed validation gate: Rec=91.36% (<91.36%) or Cryo=93.6% (<100%)",
+    "active_parameters": {
+      "c_res_base": 0.3433,
+      "w_cryo_plateau": 0.0756,
+      "w_lowland_flat": 0.0067,
+      "w_sti": 0.002,
+      "w_ommi": 0.2595,
+      "w_gii": 0.1416,
+      "w_s_perp": -0.0261,
+      "w_tcwi": 0.1643,
+      "w_fault_dmg": 0.0677,
+      "prob_sigmoid_steepness": 6.8
+    }
+  }
+}
