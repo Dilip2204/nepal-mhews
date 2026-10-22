@@ -130,3 +130,65 @@ def simulate_debris_runout(
         "affected_cells": int(np.sum(inundation_mask)),
         "paths": all_paths,
     }
+
+
+# High-Risk Downstream Himalayan Settlements vulnerable to cascade floods & avalanches
+DOWNSTREAM_SETTLEMENTS: List[Dict[str, object]] = [
+    {"name": "Kyangjin Gompa", "basin_id": "langtang", "lat": 28.212, "lon": 85.568, "elevation_m": 3870, "population": 350, "dist_from_lirung_km": 4.5},
+    {"name": "Langtang Old Village (Memorial Site)", "basin_id": "langtang", "lat": 28.214, "lon": 85.502, "elevation_m": 3430, "population": 400, "dist_from_lirung_km": 6.8},
+    {"name": "Ghodatabela Army Post", "basin_id": "langtang", "lat": 28.188, "lon": 85.441, "elevation_m": 3020, "population": 80, "dist_from_lirung_km": 14.2},
+    {"name": "Syabrubesi Choke Point", "basin_id": "langtang", "lat": 28.161, "lon": 85.337, "elevation_m": 1460, "population": 2500, "dist_from_lirung_km": 28.5},
+    {"name": "Dhunche District HQ", "basin_id": "langtang", "lat": 28.112, "lon": 85.297, "elevation_m": 1960, "population": 4200, "dist_from_lirung_km": 36.0},
+    {"name": "Sama Gaun (Manaslu Base)", "basin_id": "budhi_gandaki", "lat": 28.583, "lon": 84.633, "elevation_m": 3530, "population": 800, "dist_from_lirung_km": 5.2},
+    {"name": "Lho Village", "basin_id": "budhi_gandaki", "lat": 28.562, "lon": 84.693, "elevation_m": 3180, "population": 650, "dist_from_lirung_km": 12.0},
+    {"name": "Namrung", "basin_id": "budhi_gandaki", "lat": 28.544, "lon": 84.752, "elevation_m": 2660, "population": 450, "dist_from_lirung_km": 19.5},
+    {"name": "Philim Gorge Choke Point", "basin_id": "budhi_gandaki", "lat": 28.261, "lon": 84.898, "elevation_m": 1570, "population": 1800, "dist_from_lirung_km": 42.0},
+    {"name": "Soti Khola / Arughat Bazar", "basin_id": "budhi_gandaki", "lat": 28.043, "lon": 84.819, "elevation_m": 600, "population": 6500, "dist_from_lirung_km": 68.0},
+]
+
+
+def compute_settlement_impact_and_arrival_times(
+    basin_id: str,
+    peak_velocity_m_s: float,
+    runout_length_m: float,
+    source_station_name: str = "Langtang Lirung",
+) -> List[Dict[str, object]]:
+    """Compute downstream village arrival times (minutes) and evacuation status based on debris propagation velocity."""
+    v_eff = max(peak_velocity_m_s * 0.45, 12.0) # Effective channelized gorge routing speed (12 - 35 m/s)
+    
+    impacted = []
+    for s in DOWNSTREAM_SETTLEMENTS:
+        if s["basin_id"] == basin_id:
+            dist_km = float(s["dist_from_lirung_km"])
+            dist_m = dist_km * 1000.0
+            eta_seconds = dist_m / v_eff
+            eta_minutes = round(eta_seconds / 60.0, 1)
+            
+            # Impact probability & evacuation status
+            if runout_length_m >= dist_m * 0.7:
+                status = "DIRECT_IMPACT_IMMINENT"
+                danger_level = "CRITICAL_RED"
+            elif eta_minutes <= 30.0:
+                status = "HIGH_SURGE_WARNING"
+                danger_level = "ORANGE"
+            elif eta_minutes <= 60.0:
+                status = "EVACUATION_STANDBY"
+                danger_level = "YELLOW"
+            else:
+                status = "ADVISORY_MONITORING"
+                danger_level = "GREEN"
+                
+            impacted.append({
+                "settlement_name": s["name"],
+                "population_at_risk": s["population"],
+                "elevation_m": s["elevation_m"],
+                "distance_km": dist_km,
+                "eta_minutes": eta_minutes,
+                "evacuation_status": status,
+                "danger_level": danger_level,
+                "river_corridor": "Trishuli River" if basin_id == "langtang" else "Budhi Gandaki River",
+            })
+            
+    # Sort by arrival time (earliest first)
+    impacted.sort(key=lambda x: x["eta_minutes"])
+    return impacted

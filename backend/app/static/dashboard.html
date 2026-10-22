@@ -1893,6 +1893,66 @@
               <div>Active Triggers: <strong class="text-rose-400">${a.active_triggers.length}</strong></div>
             </div>`;
             
+        // Add Downstream Settlement Impact Table & Bilingual Broadcast
+        if (a.downstream_settlement_impacts && a.downstream_settlement_impacts.length > 0) {
+          html += `
+            <div class="mt-2.5 pt-2 border-t border-[var(--border)] space-y-1.5">
+              <div class="flex items-center justify-between text-xs font-bold text-amber-400">
+                <span>🏘️ Downstream Settlement Evacuation Timeline (Debris Routing)</span>
+                <span class="text-[10px] text-[var(--muted-foreground)] font-mono">${a.downstream_settlement_impacts[0].river_corridor}</span>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-[11px] font-mono border-collapse">
+                  <thead>
+                    <tr class="text-[var(--muted-foreground)] border-b border-[var(--border)]">
+                      <th class="py-1">Settlement</th>
+                      <th>Pop.</th>
+                      <th>Dist.</th>
+                      <th>Est. Arrival</th>
+                      <th>Evacuation Order</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${a.downstream_settlement_impacts.slice(0, 4).map(st => {
+                      const stColor = st.danger_level === 'CRITICAL_RED' ? 'text-rose-400 font-bold' :
+                                      st.danger_level === 'ORANGE' ? 'text-orange-400 font-bold' :
+                                      st.danger_level === 'YELLOW' ? 'text-amber-400' : 'text-emerald-400';
+                      return `
+                        <tr class="border-b border-[var(--border)]/50">
+                          <td class="py-1 text-[var(--foreground)] font-sans font-semibold">${st.settlement_name}</td>
+                          <td>${st.population_at_risk.toLocaleString()}</td>
+                          <td>${st.distance_km} km</td>
+                          <td class="text-sky-400 font-bold">${st.eta_minutes} min</td>
+                          <td class="${stColor}">${st.evacuation_status.replace(/_/g, ' ')}</td>
+                        </tr>
+                      `;
+                    }).join("")}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
+        }
+
+        // Add Bilingual Emergency Broadcast Card
+        if (a.civil_protection_broadcast) {
+          const bc = a.civil_protection_broadcast;
+          html += `
+            <div class="mt-2.5 p-2 rounded bg-rose-500/10 border border-rose-500/30 text-xs space-y-1.5">
+              <div class="flex items-center justify-between font-bold text-rose-400 text-[11px]">
+                <span>🚨 NDRRMA Official Emergency Broadcast (CAP v1.2)</span>
+                <span class="text-[10px] font-mono">नेपाली / English</span>
+              </div>
+              <div class="p-1.5 rounded bg-black/30 font-sans text-[11px] text-[var(--foreground)] border border-[var(--border)]">
+                <span class="text-rose-300 font-bold">नेपाली:</span> ${bc.sms_nepali || ''}
+              </div>
+              <div class="p-1.5 rounded bg-black/30 font-sans text-[11px] text-[var(--muted-foreground)] border border-[var(--border)]">
+                <span class="text-sky-300 font-bold">English:</span> ${bc.sms_english || ''}
+              </div>
+            </div>
+          `;
+        }
+
         if (d.llm.available) {
           const v = d.llm.review;
           const agreeBadge = v.agrees_with_alert === true ? `<span class="text-emerald-400 font-bold">✓ Agrees with Physics</span>` :

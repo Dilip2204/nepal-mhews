@@ -147,6 +147,60 @@ def explain_live_weather_and_factors(
         return out
 
 
+def generate_nepali_civil_protection_broadcast(
+    basin_name: str,
+    alert_level: str,
+    dynamic_fs: float,
+    active_triggers: list,
+    impacted_settlements: list,
+    timeout_s: int = int(os.environ.get("OLLAMA_TIMEOUT_S", "180")),
+) -> Dict[str, str]:
+    """Generate localized Nepali (नेपाली) and English emergency SMS/CAP broadcasts using local Ollama."""
+    nearest_village = impacted_settlements[0]["settlement_name"] if impacted_settlements else "डाउनस्ट्रिम बस्तीहरू"
+    eta_min = impacted_settlements[0]["eta_minutes"] if impacted_settlements else 30.0
+    
+    prompt = (
+        f"You are the National Disaster Risk Reduction & Management Authority (NDRRMA) Nepal automated alert system.\n"
+        f"Generate an urgent Emergency SMS Broadcast in NEPALI (देवनागरी लिपि) and English.\n"
+        f"Details: Basin: {basin_name}, Alert: {alert_level}, Safety Factor: {dynamic_fs:.2f}.\n"
+        f"Active Danger Triggers: {', '.join(active_triggers) if active_triggers else 'Monitoring'}.\n"
+        f"Nearest settlement at risk: {nearest_village} (Estimated arrival time: {eta_min} minutes).\n"
+        f"Reply ONLY JSON: {{\"sms_nepali\":\"आकस्मिक सूचना... (max 25 words in Nepali)\",\"sms_english\":\"EMERGENCY ALERT... (max 25 words in English)\",\"cap_headline\":\"...\"}}"
+    )
+    
+    body = json.dumps(
+        {
+            "model": OLLAMA_MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "format": "json",
+            "keep_alive": os.environ.get("OLLAMA_KEEP_ALIVE", "30m"),
+            "options": {"temperature": 0.1, "num_predict": 150},
+        }
+    ).encode()
+    req = urllib.request.Request(
+        f"{OLLAMA_URL}/api/generate", data=body, headers={"Content-Type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_s) as r:
+            raw = json.loads(r.read()).get("response", "")
+        return json.loads(raw)
+    except Exception:
+        # Fallback deterministic bilingual template
+        if alert_level == "RED":
+            nep = f"अति जरुरी सूचना! {basin_name} क्षेत्रमा पहिरो/बाढीको उच्च जोखिम छ। {nearest_village} तथा तटीय क्षेत्रका बासिन्दा तुरुन्त सुरक्षित अग्लो स्थानमा जानुहोस्।"
+            eng = f"CRITICAL EVACUATION ALERT: Immediate landslide/avalanche danger in {basin_name}. Residents near {nearest_village} must evacuate to higher ground immediately!"
+        else:
+            nep = f"सतर्कता सूचना: {basin_name} क्षेत्रमा नदी जलसतह र भिरमा पहिरोको जोखिम बढेको छ। सतर्क रहनुहोला।"
+            eng = f"WATCH ALERT: Elevated landslide and flood risk in {basin_name}. Stay alert near river banks."
+            
+        return {
+            "sms_nepali": nep,
+            "sms_english": eng,
+            "cap_headline": f"NDRRMA {alert_level} Hazard Warning - {basin_name}",
+        }
+
+
 def _parse_review(raw: str) -> Dict[str, Any]:
     """Parse the model's JSON; salvage fields from truncated output (token cap)."""
     import re

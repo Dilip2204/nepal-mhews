@@ -28,6 +28,7 @@ from app.ingestion.stac_sentinel import (
 from app.ml.ollama_evaluator import (
     evaluate_with_ollama,
     explain_live_weather_and_factors,
+    generate_nepali_civil_protection_broadcast,
     ollama_status,
 )
 from app.ml.moisture_downscaler import downscale_smap_moisture_and_regolith_to_30m
@@ -44,7 +45,10 @@ from app.physics.infinite_slope import (
     compute_infinite_slope_fs,
     compute_probabilistic_fs,
 )
-from app.physics.runout_routing import simulate_debris_runout
+from app.physics.runout_routing import (
+    compute_settlement_impact_and_arrival_times,
+    simulate_debris_runout,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["Himalayan-MHEWS"])
 
@@ -372,6 +376,33 @@ def evaluate_cascade_with_ollama(payload: CascadeEvaluationRequest) -> Dict[str,
     alert = evaluate_cascade_hazard(payload)
     summary = alert.model_dump()
     logger.info("Physics evaluation complete: Level=%s, DynamicFS=%.4f, Triggers=%s", summary.get("alert_level"), summary.get("dynamic_fs"), summary.get("active_triggers"))
+    
+    # Compute downstream settlement arrival times & evacuation isochrones
+    ro = summary.get("runout_summary") or {}
+    peak_v = float(ro.get("peak_velocity_m_s", 25.0))
+    runout_l = float(ro.get("runout_length_m", 1500.0))
+    settlements = compute_settlement_impact_and_arrival_times(
+        basin_id=payload.basin_id,
+        peak_velocity_m_s=peak_v,
+        runout_length_m=runout_l,
+    )
+    summary["downstream_settlement_impacts"] = settlements
+
+    # Generate bilingual emergency broadcast
+    civil_broadcast = None
+    try:
+        civil_broadcast = generate_nepali_civil_protection_broadcast(
+            basin_name=summary.get("basin_name", "Himalayan Basin"),
+            alert_level=summary.get("alert_level", "GREEN"),
+            dynamic_fs=float(summary.get("dynamic_fs", 1.25)),
+            active_triggers=summary.get("active_triggers", []),
+            impacted_settlements=settlements,
+        )
+    except Exception as exc:
+        logger.warning("Bilingual broadcast generation failed: %s", exc)
+
+    summary["civil_protection_broadcast"] = civil_broadcast
+
     try:
         review = evaluate_with_ollama(summary)
         llm = {"available": True, "review": review}
