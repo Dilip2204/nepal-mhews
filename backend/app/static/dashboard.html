@@ -5,6 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Himalayan-MHEWS • Nepal Topography & Real-Time Hazard Monitor</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    :root {
+      --background: #090d16;
+      --foreground: #f1f5f9;
+      --card: #0f172a;
+      --card-foreground: #f8fafc;
+      --border: #1e293b;
+      --muted: #1e293b;
+      --muted-foreground: #94a3b8;
+      --primary: #0284c7;
+      --primary-foreground: #ffffff;
+      --accent: #1e293b;
+      --accent-foreground: #f8fafc;
+    }
+
+    html.light {
+      --background: #f8fafc;
+      --foreground: #0f172a;
+      --card: #ffffff;
+      --card-foreground: #0f172a;
+      --border: #e2e8f0;
+      --muted: #f1f5f9;
+      --muted-foreground: #64748b;
+      --primary: #0284c7;
+      --primary-foreground: #ffffff;
+      --accent: #f1f5f9;
+      --accent-foreground: #0f172a;
+    }
+  </style>
 </head>
 <body class="bg-[var(--background)] text-[var(--foreground)] antialiased p-5 select-none">
   <div class="max-w-7xl mx-auto space-y-5">
@@ -24,6 +53,12 @@
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
+        <!-- Theme Toggle Switch -->
+        <button id="themeToggleBtn" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] hover:bg-[var(--accent)] transition">
+          <span id="themeToggleIcon">🌙</span>
+          <span id="themeToggleLabel">Dark Theme</span>
+        </button>
+        <span class="text-[var(--border)]">|</span>
         <button id="presetNormal" class="px-3 py-2 rounded-lg text-xs font-semibold border border-emerald-500/40 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition">
           ☀️ Normal Pre-Monsoon
         </button>
@@ -1951,6 +1986,42 @@
         btn.disabled = false;
         btn.classList.remove("opacity-50", "cursor-not-allowed");
       }
+    });
+
+    // ---- Dark / Light Theme Toggle Engine ----
+    const themeToggleBtn = document.getElementById("themeToggleBtn");
+    const themeToggleIcon = document.getElementById("themeToggleIcon");
+    const themeToggleLabel = document.getElementById("themeToggleLabel");
+
+    function applyTheme(isLight) {
+      if (isLight) {
+        document.documentElement.classList.add("light");
+        themeToggleIcon.textContent = "☀️";
+        themeToggleLabel.textContent = "Light Theme";
+        localStorage.setItem("mhews_theme", "light");
+      } else {
+        document.documentElement.classList.remove("light");
+        themeToggleIcon.textContent = "🌙";
+        themeToggleLabel.textContent = "Dark Theme";
+        localStorage.setItem("mhews_theme", "dark");
+      }
+      if (state.viewMode === "topo") {
+        drawNepalTopographyMap();
+      } else if (state.viewMode === "3d") {
+        draw3DTerrain();
+      }
+    }
+
+    const savedTheme = localStorage.getItem("mhews_theme");
+    if (savedTheme === "light") {
+      applyTheme(true);
+    } else {
+      applyTheme(false);
+    }
+
+    themeToggleBtn.addEventListener("click", () => {
+      const isCurrentlyLight = document.documentElement.classList.contains("light");
+      applyTheme(!isCurrentlyLight);
     });
   </script>
 </body>
