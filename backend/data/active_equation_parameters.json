@@ -1,0 +1,12 @@
+{
+  "c_res_base": 0.3433,
+  "w_cryo_plateau": 0.0756,
+  "w_lowland_flat": 0.0067,
+  "w_sti": 0.002,
+  "w_ommi": 0.2595,
+  "w_gii": 0.1416,
+  "w_s_perp": -0.0261,
+  "w_tcwi": 0.1643,
+  "w_fault_dmg": 0.068079,
+  "prob_sigmoid_steepness": 6.8
+}

@@ -284,13 +284,16 @@
             </div>
           </div>
 
-          <!-- Section Tabs: [22 Ingestion Points] vs [Risk Analysis Report] -->
-          <div class="flex gap-2 p-1 rounded-lg bg-[var(--background)] border border-[var(--border)] my-2.5">
-            <button id="tabBtnFeeds" class="flex-1 py-1.5 px-3 rounded-md text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] transition">
-              📡 22 Live Data Ingestion Points
+          <!-- Section Tabs: [22 Ingestion Points] vs [Risk Analysis Report] vs [Ground-Truth Feedback] -->
+          <div class="flex gap-1.5 p-1 rounded-lg bg-[var(--background)] border border-[var(--border)] my-2.5">
+            <button id="tabBtnFeeds" class="flex-1 py-1.5 px-2 rounded-md text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] transition">
+              📡 22 Live Data Feeds
             </button>
-            <button id="tabBtnReport" class="flex-1 py-1.5 px-3 rounded-md text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition">
+            <button id="tabBtnReport" class="flex-1 py-1.5 px-2 rounded-md text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition">
               📑 Risk Analysis Report
+            </button>
+            <button id="tabBtnFeedback" class="flex-1 py-1.5 px-2 rounded-md text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition">
+              🧬 Ground-Truth Feedback
             </button>
           </div>
 
@@ -399,6 +402,60 @@
             </div>
             <div id="ollamaReportBox" class="text-xs text-[var(--muted-foreground)] p-2 rounded bg-[var(--background)] border border-[var(--border)] italic">
               Click 'Run Local Llama Review' to invoke offline Llama-3.1 geotechnical interpretation.
+            </div>
+          </div>
+
+          <!-- TAB 3: LIVE GROUND-TRUTH EVENT FEEDBACK & CONTINUAL EQUATION ADAPTATION -->
+          <div id="tabPanelFeedback" class="space-y-2.5 hidden">
+            <div class="p-3 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-2">
+              <div class="flex items-center justify-between text-xs font-bold text-emerald-400">
+                <span>🧬 Continual Adaptation & Rule 8.4 Validation Gate</span>
+                <span id="gtCatalogBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-400">979 PTS ACTIVE</span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+                <div>Holdout Recall: <strong id="gtRecall" class="text-emerald-400">91.43%</strong></div>
+                <div>ROC-AUC: <strong id="gtAuc" class="text-sky-400">0.9107</strong></div>
+                <div>Cryo Anchors: <strong id="gtCryo" class="text-emerald-400">100.0%</strong></div>
+                <div>Live GT Match: <strong id="gtLiveAcc" class="text-emerald-400">100.0%</strong></div>
+              </div>
+              <div id="gtGateStatus" class="text-[11px] font-mono text-[var(--muted-foreground)] pt-1 border-t border-[var(--border)]">
+                Base: 949 pts • Cryosphere: 24 pts • Live NDRRMA/Sentinel Feedback: <strong id="gtLiveCount" class="text-sky-400">6</strong> pts
+              </div>
+            </div>
+
+            <!-- Ingest Selected Observation Site as Verified Ground-Truth -->
+            <div class="p-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-2 text-xs">
+              <div class="font-bold text-[11px] text-sky-400">➕ Ingest Selected Site into Ground-Truth Training Catalog:</div>
+              <div class="grid grid-cols-2 gap-2">
+                <select id="gtLabelSelect" class="bg-[var(--card)] border border-[var(--border)] rounded p-1.5 text-[11px]">
+                  <option value="1">🔴 Confirmed Slope Failure (Label = 1)</option>
+                  <option value="0">🟢 Verified Storm-Resilient Stable (Label = 0)</option>
+                </select>
+                <select id="gtSourceSelect" class="bg-[var(--card)] border border-[var(--border)] rounded p-1.5 text-[11px]">
+                  <option value="NDRRMA_FIELD_VERIFIED">NDRRMA Field Verification</option>
+                  <option value="SENTINEL2_DELTA_NDVI_SCAR">Sentinel-2 ΔNDVI Scar (< -0.18)</option>
+                  <option value="SENTINEL1_SAR_BACKSCATTER_DIFF">Sentinel-1 SAR Amplitude Diff</option>
+                </select>
+              </div>
+              <button id="btnSubmitGroundTruth" class="w-full py-1.5 px-3 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition">
+                ⚡ Append Ground-Truth & Adapt 7-Factor Equation
+              </button>
+              <div id="gtSubmitResult" class="text-[11px] font-mono text-[var(--muted-foreground)]"></div>
+            </div>
+
+            <!-- Verified Ground-Truth Events Table -->
+            <div class="max-h-[210px] overflow-y-auto pr-1 custom-scroll rounded border border-[var(--border)] bg-[var(--background)]">
+              <table class="w-full text-left text-[11px] border-collapse">
+                <thead class="sticky top-0 bg-[var(--card)] border-b border-[var(--border)] text-[var(--muted-foreground)] font-mono text-[10px]">
+                  <tr>
+                    <th class="p-1.5">VERIFIED EVENT</th>
+                    <th class="p-1.5">SOURCE</th>
+                    <th class="p-1.5">ELEV / β</th>
+                    <th class="p-1.5">LABEL</th>
+                  </tr>
+                </thead>
+                <tbody id="groundTruthTableBody" class="font-mono divide-y divide-[var(--border)]/60"></tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -1047,19 +1104,108 @@
       }
     }
 
-    // Tab Switchers: Feeds vs Report
-    document.getElementById("tabBtnFeeds").addEventListener("click", () => {
-      document.getElementById("tabPanelFeeds").classList.remove("hidden");
-      document.getElementById("tabPanelReport").classList.add("hidden");
-      document.getElementById("tabBtnFeeds").className = "flex-1 py-1.5 px-3 rounded-md text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] transition";
-      document.getElementById("tabBtnReport").className = "flex-1 py-1.5 px-3 rounded-md text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition";
-    });
+    // Tab Switchers: Feeds vs Report vs Ground-Truth Feedback
+    function activateRightTab(tab) {
+      document.getElementById("tabPanelFeeds").classList.toggle("hidden", tab !== "feeds");
+      document.getElementById("tabPanelReport").classList.toggle("hidden", tab !== "report");
+      document.getElementById("tabPanelFeedback").classList.toggle("hidden", tab !== "feedback");
 
-    document.getElementById("tabBtnReport").addEventListener("click", () => {
-      document.getElementById("tabPanelReport").classList.remove("hidden");
-      document.getElementById("tabPanelFeeds").classList.add("hidden");
-      document.getElementById("tabBtnReport").className = "flex-1 py-1.5 px-3 rounded-md text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] transition";
-      document.getElementById("tabBtnFeeds").className = "flex-1 py-1.5 px-3 rounded-md text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition";
+      const activeCls = "flex-1 py-1.5 px-2 rounded-md text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] transition";
+      const inactiveCls = "flex-1 py-1.5 px-2 rounded-md text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition";
+
+      document.getElementById("tabBtnFeeds").className = tab === "feeds" ? activeCls : inactiveCls;
+      document.getElementById("tabBtnReport").className = tab === "report" ? activeCls : inactiveCls;
+      document.getElementById("tabBtnFeedback").className = tab === "feedback" ? activeCls : inactiveCls;
+
+      if (tab === "feedback") {
+        loadGroundTruthFeedback();
+      }
+    }
+
+    document.getElementById("tabBtnFeeds").addEventListener("click", () => activateRightTab("feeds"));
+    document.getElementById("tabBtnReport").addEventListener("click", () => activateRightTab("report"));
+    document.getElementById("tabBtnFeedback").addEventListener("click", () => activateRightTab("feedback"));
+
+    async function loadGroundTruthFeedback() {
+      try {
+        const res = await fetch("/api/v1/feedback/ground-truth");
+        const data = await res.json();
+        renderGroundTruthFeedback(data);
+      } catch (err) {
+        console.warn("Ground-truth feedback fetch:", err);
+      }
+    }
+
+    function renderGroundTruthFeedback(data) {
+      if (!data) return;
+      document.getElementById("gtCatalogBadge").textContent = `${data.total_training_catalog_points} PTS ACTIVE`;
+      document.getElementById("gtLiveCount").textContent = data.live_feedback_points;
+      if (data.optimizer_state) {
+        const o = data.optimizer_state;
+        document.getElementById("gtRecall").textContent = `${o.holdout_recall_pct}%`;
+        document.getElementById("gtAuc").textContent = o.roc_auc.toFixed(4);
+        document.getElementById("gtCryo").textContent = `${o.cryosphere_anchor_acc_pct}%`;
+        document.getElementById("gtLiveAcc").textContent = `${o.live_feedback_acc_pct}%`;
+      }
+      const tbody = document.getElementById("groundTruthTableBody");
+      if (!tbody || !data.events) return;
+      tbody.innerHTML = "";
+      data.events.forEach(ev => {
+        const tr = document.createElement("tr");
+        const badge = ev.label === 1
+          ? '<span class="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 font-bold">1 (FAIL)</span>'
+          : '<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">0 (SAFE)</span>';
+        tr.innerHTML = `
+          <td class="p-1.5 font-sans font-medium text-[var(--foreground)]">${ev.event_name}</td>
+          <td class="p-1.5 text-[10px] text-sky-400">${ev.source}</td>
+          <td class="p-1.5 text-[var(--muted-foreground)]">${ev.elevation_m}m / ${ev.slope_deg}°</td>
+          <td class="p-1.5">${badge}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById("btnSubmitGroundTruth").addEventListener("click", async () => {
+      const btn = document.getElementById("btnSubmitGroundTruth");
+      const statusBox = document.getElementById("gtSubmitResult");
+      const st = state.sites.find(s => s.site_id === state.selectedSiteId) || {
+        name: "Langtang Lirung Radar",
+        latitude: 28.232,
+        longitude: 85.518,
+        elevation_m: 5680.0,
+        slope_deg: 46.0,
+        hazard_type: "rock_ice_avalanche",
+      };
+      const lbl = parseInt(document.getElementById("gtLabelSelect").value, 10);
+      const src = document.getElementById("gtSourceSelect").value;
+
+      btn.disabled = true;
+      statusBox.textContent = "Ingesting ground-truth & running evolutionary optimizer...";
+      try {
+        const res = await fetch("/api/v1/feedback/ground-truth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            event_name: `${st.name} (${src.split("_")[0]})`,
+            latitude: st.latitude,
+            longitude: st.longitude,
+            elevation_m: st.elevation_m,
+            slope_deg: st.slope_deg,
+            label: lbl,
+            source: src,
+            hazard_type: st.hazard_type || "monsoon_landslide",
+          }),
+        });
+        const out = await res.json();
+        const ad = out.adaptation_result;
+        statusBox.textContent = `Gen #${ad.generation}: ${ad.reason}`;
+        await loadGroundTruthFeedback();
+        await updateEngineStatus();
+      } catch (err) {
+        statusBox.textContent = `Error: ${err}`;
+      } finally {
+        btn.disabled = false;
+      }
     });
 
     // Theme Engine
@@ -1138,6 +1284,7 @@
     initLeafletMap();
     loadSites();
     fetchSiteReport(state.selectedSiteId);
+    loadGroundTruthFeedback();
     updateEngineStatus();
   </script>
 </body>

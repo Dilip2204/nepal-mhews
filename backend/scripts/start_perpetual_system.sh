@@ -38,3 +38,4 @@ echo "     Logs: ${LOG_FILE}"
 echo "     Commands to monitor:"
 echo "       tmux attach -t $SESSION_NAME   (detach with Ctrl+b d)"
 echo "       tail -f ${LOG_FILE}"
+

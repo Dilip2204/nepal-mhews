@@ -29,6 +29,10 @@ os.environ.setdefault("NUMEXPR_NUM_THREADS", "4")
 
 from app.engine.sites_catalog import load_sites_of_interest, SiteInfo
 from app.ingestion.expanded_weather import fetch_batch_expanded_weather, LiveSiteTelemetry
+from app.ingestion.ground_truth_feedback import (
+    load_live_ground_truth_events,
+    scan_live_telemetry_for_ground_truth_confirmations,
+)
 from app.physics.feature_synthesizer import RawEarthObservationInputs, synthesize_physics_variables
 from app.ml.susceptibility import synthesize_point_physics_from_terrain
 from app.ml.continuous_equation_optimizer import ContinuousEquationOptimizer
@@ -241,15 +245,33 @@ class PerpetualEngineOrchestrator:
         self.db_conn.commit()
         print(f"      Alert Distribution: GREEN={alert_counts['GREEN']} | YELLOW={alert_counts['YELLOW']} | ORANGE={alert_counts['ORANGE']} | RED={alert_counts['RED']}", flush=True)
 
-        # 3. Evolutionary Geomechanical Equation Optimization Generation
-        print(f"[3/4] Running evolutionary geomechanical equation optimization generation...", flush=True)
+        # 3. Live Ground-Truth Event Feedback Loop (NDRRMA & Sentinel-2/SAR Scar Detection)
+        print(f"[3/5] Scanning for newly verified NDRRMA / Sentinel-2 ground-truth feedback events...", flush=True)
+        sites_dicts = [asdict(s) for s in self.sites]
+        live_weather_dicts = {
+            sid: {
+                "rainfall_72h_mm": t.rain_72h_mm,
+                "peak_intensity_1h_mm": t.rain_peak_1h_mm,
+                "seismic_pga_g": t.seismic_pga_g,
+            }
+            for sid, t in telemetry_map.items()
+        }
+        new_gt_events = scan_live_telemetry_for_ground_truth_confirmations(sites_dicts, live_weather_dicts)
+        all_gt_events = load_live_ground_truth_events()
+        print(
+            f"      Ground-Truth Catalog: {len(all_gt_events)} live feedback events ({len(new_gt_events)} newly auto-confirmed this cycle).",
+            flush=True,
+        )
+
+        # 4. Evolutionary Geomechanical Equation Optimization Generation
+        print(f"[4/5] Running evolutionary geomechanical equation optimization generation...", flush=True)
         opt_res = self.optimizer.step_optimization_generation()
-        print(f"      Gen #{opt_res.generation}: Fitness={opt_res.fitness_score:.4f} | Recall={opt_res.recall*100:.2f}% | Promoted={opt_res.promoted}", flush=True)
+        print(f"      Gen #{opt_res.generation}: Fitness={opt_res.fitness_score:.4f} | Recall={opt_res.recall*100:.2f}% | Cryo={opt_res.cryo_accuracy*100:.1f}% | LiveGT={opt_res.live_feedback_accuracy*100:.1f}% | Promoted={opt_res.promoted}", flush=True)
         print(f"      Status: {opt_res.reason}", flush=True)
 
-        # 4. Save Real-Time Status Snapshot for Dashboard & Monitoring
+        # 5. Save Real-Time Status Snapshot for Dashboard & Monitoring
         cycle_duration = round(time.time() - cycle_start, 2)
-        print(f"[4/4] Cycle #{self.cycle_count} complete in {cycle_duration}s. Writing status snapshot...", flush=True)
+        print(f"[5/5] Cycle #{self.cycle_count} complete in {cycle_duration}s. Writing status snapshot...", flush=True)
 
         status = {
             "service": "Himalayan-MHEWS Perpetual Ingestion & Physics Engine",
@@ -262,12 +284,21 @@ class PerpetualEngineOrchestrator:
             "latest_top_risk_sites": [
                 s for s in site_evaluations if s["alert"] in ("RED", "ORANGE", "YELLOW")
             ][:10],
+            "ground_truth_feedback": {
+                "total_training_catalog_points": opt_res.dataset_total_points,
+                "base_catalog_points": 949,
+                "cryosphere_anchor_points": 24,
+                "live_feedback_points": opt_res.live_feedback_points,
+                "newly_confirmed_this_cycle": len(new_gt_events),
+                "recent_events": all_gt_events[-6:][::-1],
+            },
             "optimizer": {
                 "current_generation": opt_res.generation,
                 "active_fitness_score": opt_res.fitness_score,
                 "holdout_recall_pct": round(opt_res.recall * 100, 2),
                 "roc_auc": round(opt_res.roc_auc, 4),
                 "cryosphere_anchor_acc_pct": round(opt_res.cryo_accuracy * 100, 1),
+                "live_feedback_acc_pct": round(opt_res.live_feedback_accuracy * 100, 1),
                 "avg_fs_deviation_pct": opt_res.avg_fs_deviation_pct,
                 "last_promoted": opt_res.promoted,
                 "last_reason": opt_res.reason,

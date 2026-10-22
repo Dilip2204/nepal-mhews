@@ -54,6 +54,13 @@ CRYOSPHERE_ANCHOR_CSV = (
     / "himalayan_cryosphere_avalanches_glofs.csv"
 )
 
+LIVE_GROUND_TRUTH_FEEDBACK_CSV = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "processed"
+    / "live_ground_truth_feedback.csv"
+)
+
 HYBRID_FEATURE_NAMES: Tuple[str, ...] = (
     # Raw real satellite/geophysical measurements
     "slope_deg",
@@ -421,8 +428,9 @@ def compute_elevation_debiased_weights(
 def load_real_nepal_hybrid_dataset(
     csv_path: Path = REAL_TRAINING_CSV,
     cryosphere_csv_path: Path = CRYOSPHERE_ANCHOR_CSV,
+    feedback_csv_path: Path = LIVE_GROUND_TRUTH_FEEDBACK_CSV,
 ) -> Optional[Dict[str, np.ndarray]]:
-    """Load the 949 real Nepal points + 24 high-mountain (>4500m) avalanche/GLOF anchors."""
+    """Load the 949 real Nepal points + 24 high-mountain (>4500m) avalanche/GLOF anchors + live ground-truth feedback."""
     if not csv_path.exists():
         return None
 
@@ -447,6 +455,13 @@ def load_real_nepal_hybrid_dataset(
             reader = csv.DictReader(f)
             for r in reader:
                 rows.append({k: float(r[k]) for k in numeric_keys})
+
+    if feedback_csv_path.exists():
+        with feedback_csv_path.open("r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for r in reader:
+                if all(k in r for k in numeric_keys):
+                    rows.append({k: float(r[k]) for k in numeric_keys})
 
     if not rows:
         return None

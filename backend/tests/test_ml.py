@@ -139,3 +139,29 @@ def test_pinn_cohesion_depth_inverter_and_smap_downscaler():
     )
     assert np.isclose(ds_res["mean_downscaled_vwc"], 0.28, atol=0.02)
     assert ds_res["max_vwc_gully"] > ds_res["min_vwc_ridge"]
+
+
+def test_live_ground_truth_feedback_loop_and_evolutionary_optimizer():
+    """Verify Live Ground-Truth Event Feedback ingestion and Rule 8.4 Evolutionary Optimizer."""
+    from app.ingestion.ground_truth_feedback import (
+        ensure_feedback_catalog_initialized,
+        load_live_ground_truth_events,
+    )
+    from app.ml.continuous_equation_optimizer import ContinuousEquationOptimizer
+
+    ensure_feedback_catalog_initialized()
+    events = load_live_ground_truth_events()
+    assert len(events) >= 6
+
+    opt = ContinuousEquationOptimizer()
+    acc, rec, auc, f1, cryo_acc, fb_acc, avg_dev = opt.evaluate_parameter_set(opt.active_params)
+    assert rec >= 0.9136
+    assert cryo_acc >= 0.999
+    assert fb_acc >= 0.85
+    assert avg_dev <= 5.0
+
+    step_res = opt.step_optimization_generation(n_candidates=2)
+    assert step_res.dataset_total_points >= 979
+    assert step_res.live_feedback_points >= 6
+    assert step_res.recall >= 0.9136
+    assert step_res.cryo_accuracy >= 0.999

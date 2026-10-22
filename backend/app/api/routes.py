@@ -742,3 +742,83 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
         "settlement_impacts": impacted_villages,
         "civil_protection_broadcast": bilingual_broadcast,
     }
+
+
+@router.get("/feedback/ground-truth")
+async def get_ground_truth_feedback_catalog():
+    """Return the Live Ground-Truth Event Feedback Catalog (NDRRMA + Sentinel-2/SAR) & Optimizer state."""
+    from app.ingestion.ground_truth_feedback import load_live_ground_truth_events
+    from app.ml.continuous_equation_optimizer import ContinuousEquationOptimizer
+
+    events = load_live_ground_truth_events()
+    opt = ContinuousEquationOptimizer()
+    acc, rec, auc, f1, cryo_acc, fb_acc, avg_dev = opt.evaluate_parameter_set(opt.active_params)
+
+    return {
+        "total_training_catalog_points": len(opt._dataset),
+        "base_catalog_points": 949,
+        "cryosphere_anchor_points": 24,
+        "live_feedback_points": len(events),
+        "optimizer_state": {
+            "current_generation": opt.current_generation,
+            "accuracy_pct": round(acc * 100.0, 2),
+            "holdout_recall_pct": round(rec * 100.0, 2),
+            "roc_auc": round(auc, 4),
+            "cryosphere_anchor_acc_pct": round(cryo_acc * 100.0, 1),
+            "live_feedback_acc_pct": round(fb_acc * 100.0, 1),
+            "avg_fs_deviation_pct": round(avg_dev, 2),
+            "active_parameters": opt.active_params,
+        },
+        "events": events[::-1],
+    }
+
+
+@router.post("/feedback/ground-truth")
+async def submit_ground_truth_feedback_event(payload: dict):
+    """Ingest a newly confirmed NDRRMA field report or Sentinel-2/SAR scar detection,
+    append to the training catalog, recalibrate 0.3-deg differential blocks, and step
+    the ContinuousEquationOptimizer.
+    """
+    from app.ingestion.ground_truth_feedback import append_ground_truth_event, load_live_ground_truth_events
+    from app.ml.continuous_equation_optimizer import ContinuousEquationOptimizer
+
+    rec = append_ground_truth_event(
+        event_name=str(payload.get("event_name", "NDRRMA Field-Verified Slope Event")),
+        latitude=float(payload.get("latitude", 28.18)),
+        longitude=float(payload.get("longitude", 85.35)),
+        elevation_m=float(payload.get("elevation_m", 1850.0)),
+        slope_deg=float(payload.get("slope_deg", 38.0)),
+        label=int(payload.get("label", 1)),
+        source=str(payload.get("source", "NDRRMA_FIELD_VERIFIED")),
+        hazard_type=str(payload.get("hazard_type", "monsoon_landslide")),
+        profile_curvature=payload.get("profile_curvature"),
+        local_relief_m=payload.get("local_relief_m"),
+        fault_distance_km=payload.get("fault_distance_km"),
+        ndvi_drop=float(payload.get("ndvi_drop", -0.25)),
+        rainfall_72h_mm=float(payload.get("rainfall_72h_mm", 160.0)),
+        notes=str(payload.get("notes", "")),
+    )
+
+    # Retrain differential block offsets & step evolutionary optimizer
+    _susceptibility_model.fit_and_evaluate()
+    opt = ContinuousEquationOptimizer()
+    opt_res = opt.step_optimization_generation(n_candidates=6)
+    events = load_live_ground_truth_events()
+
+    return {
+        "ingested_event": rec,
+        "total_training_catalog_points": opt_res.dataset_total_points,
+        "live_feedback_points": len(events),
+        "adaptation_result": {
+            "generation": opt_res.generation,
+            "fitness_score": opt_res.fitness_score,
+            "holdout_recall_pct": round(opt_res.recall * 100.0, 2),
+            "roc_auc": round(opt_res.roc_auc, 4),
+            "cryosphere_anchor_acc_pct": round(opt_res.cryo_accuracy * 100.0, 1),
+            "live_feedback_acc_pct": round(opt_res.live_feedback_accuracy * 100.0, 1),
+            "avg_fs_deviation_pct": opt_res.avg_fs_deviation_pct,
+            "promoted": opt_res.promoted,
+            "reason": opt_res.reason,
+        },
+        "events": events[::-1],
+    }
