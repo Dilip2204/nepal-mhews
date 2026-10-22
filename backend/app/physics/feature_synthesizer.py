@@ -130,10 +130,16 @@ def synthesize_physics_variables(raw: RawEarthObservationInputs) -> Dict[str, fl
     """
     slope_rad = np.deg2rad(np.clip(raw.slope_deg, 0.5, 85.0))
 
-    # --- 1. Topographic Wetness Index (TWI) & Solar Aspect Evapotranspiration Factor ---
+    # --- 1. Topographic Wetness Index (TWI), Stream Power (SPI), & Sediment Transport (STI) ---
     # TWI = ln(a / tan(beta)), where 'a' is specific catchment area per unit contour width (30m)
     specific_catchment_area = max(raw.upslope_contributing_area_m2 / 30.0, 1.0)
-    twi = float(np.log(specific_catchment_area / max(np.tan(slope_rad), 0.01)))
+    tan_beta = max(float(np.tan(slope_rad)), 0.01)
+    sin_beta = max(float(np.sin(slope_rad)), 0.01)
+    twi = float(np.log(specific_catchment_area / tan_beta))
+    spi = float(np.log(1.0 + specific_catchment_area * tan_beta))
+    sti = float(
+        np.log(1.0 + ((specific_catchment_area / 22.13) ** 0.4) * ((sin_beta / 0.0896) ** 1.3))
+    )
 
     # South-facing slopes in Nepal (aspect ~ 180 deg) receive stronger solar radiation -> more drying & faster snowmelt
     aspect_rad = np.deg2rad(raw.aspect_deg)
@@ -263,5 +269,7 @@ def synthesize_physics_variables(raw: RawEarthObservationInputs) -> Dict[str, fl
         "seismic_kh": round(seismic_kh, 4),
         "ridge_amplification_factor": round(ridge_amplification, 3),
         "twi": round(twi, 2),
+        "spi": round(spi, 3),
+        "sti": round(sti, 3),
         "porosity": round(porosity, 3),
     }

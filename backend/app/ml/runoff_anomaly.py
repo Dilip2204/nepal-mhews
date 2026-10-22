@@ -64,6 +64,7 @@ class TemporalRunoffAnomalyDetector:
             import torch
             import torch.nn as nn
 
+            torch.set_num_threads(1)
             torch.manual_seed(42)
             in_dim = z_train.shape[1]
             model = nn.Sequential(

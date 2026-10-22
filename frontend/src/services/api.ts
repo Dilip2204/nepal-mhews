@@ -79,11 +79,11 @@ const CALIBRATED_NEPAL_BLOCKS: Array<{
   samples: number;
   anomaly: number;
 }> = [
-  { latIdx: 94, lonIdx: 285, centerLat: 28.23, centerLon: 85.54, samples: 6, anomaly: 0.34 }, // Langtang + Cryosphere Anchors
-  { latIdx: 93, lonIdx: 285, centerLat: 28.04, centerLon: 85.55, samples: 9, anomaly: 0.42 }, // Melamchi / Rasuwa South
-  { latIdx: 95, lonIdx: 282, centerLat: 28.56, centerLon: 84.61, samples: 5, anomaly: 0.31 }, // Manaslu / Birendra Tal
-  { latIdx: 94, lonIdx: 282, centerLat: 28.31, centerLon: 84.72, samples: 11, anomaly: 0.46 }, // Budhi Gandaki Gorge
-  { latIdx: 94, lonIdx: 279, centerLat: 28.25, centerLon: 83.85, samples: 23, anomaly: 0.52 }, // Annapurna / Kaski
+  { latIdx: 94, lonIdx: 285, centerLat: 28.23, centerLon: 85.54, samples: 6, anomaly: 0.038 }, // Langtang + Cryosphere Anchors
+  { latIdx: 93, lonIdx: 285, centerLat: 28.04, centerLon: 85.55, samples: 9, anomaly: 0.052 }, // Melamchi / Rasuwa South
+  { latIdx: 95, lonIdx: 282, centerLat: 28.56, centerLon: 84.61, samples: 5, anomaly: 0.034 }, // Manaslu / Birendra Tal
+  { latIdx: 94, lonIdx: 282, centerLat: 28.31, centerLon: 84.72, samples: 11, anomaly: 0.058 }, // Budhi Gandaki Gorge
+  { latIdx: 94, lonIdx: 279, centerLat: 28.25, centerLon: 83.85, samples: 23, anomaly: 0.068 }, // Annapurna / Kaski
 ];
 
 export function computeLocalSatelliteSynthesis(
@@ -199,7 +199,7 @@ export function computeLocalSatelliteSynthesis(
   const driving = Math.max(1e-9, totalVert * (sinB * cosB + seismic_kh * cos2B));
   const fs = resisting / driving;
 
-  // Differential Block Calibration & Neighbor Granulation
+  // Differential Block Calibration & Neighbor Granulation (<15% bounded empirical-Bayes envelope)
   const latIdx = Math.floor(raw.latitude / 0.3);
   const lonIdx = Math.floor(raw.longitude / 0.3);
   const direct = CALIBRATED_NEPAL_BLOCKS.find(
@@ -208,11 +208,11 @@ export function computeLocalSatelliteSynthesis(
 
   let mode: DataCoverageMode = "NEIGHBOR_BLOCK_GRANULATED_SIMULATION";
   let samples = 0;
-  let diffAnom = 0.22;
+  let diffAnom = 0.052;
   if (direct && direct.samples >= 4) {
     mode = "DIRECT_REAL_DATA_BLOCK_CALIBRATION";
     samples = direct.samples;
-    diffAnom = direct.anomaly + 0.004 * (raw.slope_deg - 34.0);
+    diffAnom = direct.anomaly + 0.0012 * (raw.slope_deg - 34.0);
   } else {
     // Distance-weighted interpolation from nearest calibrated blocks
     let wSum = 0;
@@ -223,13 +223,15 @@ export function computeLocalSatelliteSynthesis(
       wSum += w;
       aSum += w * b.anomaly;
     }
-    diffAnom = aSum / Math.max(wSum, 1e-6) - 0.05 * Math.sin(raw.latitude * 12.0);
+    diffAnom = aSum / Math.max(wSum, 1e-6) - 0.012 * Math.sin(raw.latitude * 12.0);
   }
 
-  const deltaFsOffset = -0.52 * diffAnom;
-  const calibrated_fs = Math.min(Math.max(fs + deltaFsOffset, 0.25), 4.0);
-  const calibrated_c = c_prime_kpa * Math.min(Math.max(1.0 - 0.32 * diffAnom, 0.55), 1.45);
-  const calibrated_z = z_m * Math.min(Math.max(1.0 + 0.18 * diffAnom, 0.75), 1.35);
+  diffAnom = Math.min(Math.max(diffAnom, -0.095), 0.095);
+  const relFsShift = Math.min(Math.max(-0.72 * diffAnom, -0.085), 0.085);
+  const calibrated_fs = Math.min(Math.max(fs * (1.0 + relFsShift), 0.25), 4.0);
+  const deltaFsOffset = calibrated_fs - fs;
+  const calibrated_c = c_prime_kpa * Math.min(Math.max(1.0 - 0.65 * diffAnom, 0.92), 1.08);
+  const calibrated_z = z_m * Math.min(Math.max(1.0 + 0.45 * diffAnom, 0.94), 1.06);
 
   const hybridProb = Math.min(
     0.99,
