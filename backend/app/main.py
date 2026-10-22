@@ -39,6 +39,27 @@ app.add_middleware(
 app.include_router(mhews_router)
 
 
+@app.on_event("startup")
+def warm_up_susceptibility_model() -> None:
+    """Train the Tier A model once in the background so the first alert request is not slow."""
+    import threading
+
+    from app.api import routes
+
+    def _train() -> None:
+        try:
+            if routes._susceptibility_model.pipeline is None:
+                routes._susceptibility_model.fit_and_evaluate()
+            logger.info("Susceptibility model warm-up complete")
+            if not routes._anomaly_detector._is_fitted:
+                routes._anomaly_detector.fit_chronological()
+            logger.info("Runoff anomaly detector warm-up complete")
+        except Exception as exc:  # never block startup
+            logger.warning("Susceptibility warm-up failed: %s", exc)
+
+    threading.Thread(target=_train, daemon=True).start()
+
+
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def serve_interactive_dashboard():
     """Serve the interactive 3D Himalayan-MHEWS Dashboard at the root URL."""

@@ -14,12 +14,21 @@ from app.api.schemas import (
 )
 from app.core.config import PILOT_BASINS, settings
 from app.core.database import get_database_metadata
+from app.core.logging import get_logger
 from app.ingestion.dem_processor import fetch_and_process_copernicus_dem_patch
-from app.ingestion.hydro_imerg import evaluate_hydromet_saturation
+from app.ingestion.hydro_imerg import (
+    evaluate_hydromet_saturation,
+    fetch_live_hydromet_observations,
+)
 from app.ingestion.seismic_usgs import evaluate_seismic_trigger
 from app.ingestion.stac_sentinel import (
     evaluate_sar_creep_acceleration,
     search_basin_stac_scenes,
+)
+from app.ml.ollama_evaluator import (
+    evaluate_with_ollama,
+    explain_live_weather_and_factors,
+    ollama_status,
 )
 from app.ml.moisture_downscaler import downscale_smap_moisture_and_regolith_to_30m
 from app.ml.pinn_inversion import PINNCohesionDepthInverter
@@ -38,6 +47,8 @@ from app.physics.infinite_slope import (
 from app.physics.runout_routing import simulate_debris_runout
 
 router = APIRouter(prefix="/api/v1", tags=["Himalayan-MHEWS"])
+
+logger = get_logger("nepal_mhews.api")
 
 _susceptibility_model = LandslideSusceptibilityModel(random_state=42)
 _anomaly_detector = TemporalRunoffAnomalyDetector()
@@ -346,6 +357,59 @@ def evaluate_cascade_hazard(payload: CascadeEvaluationRequest) -> CascadeAlertRe
         },
         runout_summary=runout_summary,
     )
+
+
+@router.get("/ollama/status")
+def get_ollama_status() -> Dict[str, object]:
+    """Check whether the local Ollama server is reachable and list its models."""
+    return ollama_status()
+
+
+@router.post("/alerts/evaluate-ollama")
+def evaluate_cascade_with_ollama(payload: CascadeEvaluationRequest) -> Dict[str, object]:
+    """Run the physics cascade evaluation, then have a local Ollama LLM review it offline."""
+    logger.info("evaluate-ollama called for basin '%s', slope=%.1f°, z=%.2fm", payload.basin_id, payload.beta_deg, payload.z)
+    alert = evaluate_cascade_hazard(payload)
+    summary = alert.model_dump()
+    logger.info("Physics evaluation complete: Level=%s, DynamicFS=%.4f, Triggers=%s", summary.get("alert_level"), summary.get("dynamic_fs"), summary.get("active_triggers"))
+    try:
+        review = evaluate_with_ollama(summary)
+        llm = {"available": True, "review": review}
+    except Exception as exc:  # Ollama down/slow: physics alert still returned
+        logger.warning("Ollama offline review bypassed or failed: %s", exc)
+        llm = {"available": False, "error": str(exc)}
+    return {"alert": summary, "llm": llm}
+
+
+@router.get("/weather/live-and-explain")
+def get_live_weather_and_ai_synthesis(
+    lat: float = 28.232,
+    lon: float = 85.518,
+    elevation_m: float = 5680.0,
+    slope_deg: float = 46.0,
+    station_name: str = "Langtang Station",
+) -> Dict[str, object]:
+    """Fetch live precipitation/temperature for station coordinates, then explain factors with Ollama."""
+    live_hydro = fetch_live_hydromet_observations(lat=lat, lon=lon, elevation_m=elevation_m)
+    logger.info("Fetched live weather for '%s': 72h rain=%.2fmm, temp=%.1f°C", station_name, live_hydro["cumulative_rain_72h_mm"], live_hydro["mean_temp_c"])
+    
+    ai_interpretation = None
+    try:
+        ai_interpretation = explain_live_weather_and_factors(
+            station_name=station_name,
+            live_hydro=live_hydro,
+            slope_deg=slope_deg,
+            elevation_m=elevation_m,
+        )
+    except Exception as exc:
+        logger.warning("Ollama weather explanation failed: %s", exc)
+        ai_interpretation = {"error": str(exc), "risk_severity": "UNKNOWN"}
+        
+    return {
+        "station_name": station_name,
+        "live_observations": live_hydro,
+        "ai_synthesis": ai_interpretation,
+    }
 
 
 @router.get("/basins/{basin_id}/grid-geojson")

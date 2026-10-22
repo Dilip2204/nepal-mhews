@@ -163,6 +163,12 @@ nepal-mhews/
 - **Rule:** ALWAYS set `OMP_NUM_THREADS=4`, `OPENBLAS_NUM_THREADS=4`, `MKL_NUM_THREADS=4`, `NUMEXPR_NUM_THREADS=4` and pass `n_jobs=4` / `nthread=4` to XGBoost/scikit-learn/PyTorch **before** running any model training or heavy vectorized computation.
 - **Reason:** This host is a shared 256-core server; unconstrained `XGBClassifier.fit()` spawns ~136 threads and stalls due to OpenMP/BLAS nested-parallelism oversubscription.
 
+### 8.1b Offline AI Second Opinion (Local Ollama)
+- Code: `backend/app/ml/ollama_evaluator.py`; endpoints `GET /api/v1/ollama/status`, `POST /api/v1/alerts/evaluate-ollama`; dashboard panel "Offline AI Second Opinion".
+- Config: `OLLAMA_URL` (default `http://127.0.0.1:11434`), `OLLAMA_MODEL` (default `llama3.1:8b`); see `backend/.env.example`. Launch with `backend/scripts/run_with_ollama.sh`.
+- Ollama runs on the user's Windows PC; reach it from this server via `ssh -R 11434:127.0.0.1:11434 <user>@<server>`.
+- Rules: only LOCAL models (never `*-cloud`, which sends data off-machine). The physics engine sets the alert level; the LLM only reviews/explains.
+
 ### 8.2 Verified Reachable Open Geohazard Data Sources (No Auth Needed)
 1. **NASA Global Landslide Catalog (COOLR CSV Export):**
    - URL: `https://data.nasa.gov/docs/legacy/Global_Landslide_Catalog_Export/Global_Landslide_Catalog_Export_rows.csv` (~11k global events, 479 for Nepal; use `curl -sL --retry 2` for round-robin DNS resilience).
