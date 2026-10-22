@@ -193,9 +193,9 @@ class PerpetualEngineOrchestrator:
                 matric_suction_kpa=syn["matric_suction_kpa"],
             ))
             static_fs = geo["static_fs"]
-            cal_fs = static_fs
+            cal_fs = dynamic_fs
 
-            # Precursor triggers check
+            # Precursor triggers check under live telemetry
             triggers = []
             if rain_72h >= 120.0 or (telem and telem.dahal_hasegawa_cloudburst):
                 triggers.append("CLOUD_BURST_SATURATION")
@@ -208,18 +208,18 @@ class PerpetualEngineOrchestrator:
             if wind_surcharge >= 0.40:
                 triggers.append("WIND_BLOWN_CORNICE_SURCHARGE")
 
-            # Cascade Alert Matrix (Rule 6)
-            if cal_fs < 1.0 and len(triggers) >= 1:
+            # Cascade Alert Matrix (Rule 6 - Evaluated on Real-Time Dynamic FS)
+            if dynamic_fs < 1.0 and len(triggers) >= 1:
                 lvl = "RED"
-            elif cal_fs < 1.05 or len(triggers) >= 2:
+            elif dynamic_fs < 1.0 or len(triggers) >= 2:
                 lvl = "ORANGE"
-            elif cal_fs < 1.25 or len(triggers) == 1:
+            elif dynamic_fs < 1.25 or len(triggers) == 1:
                 lvl = "YELLOW"
             else:
                 lvl = "GREEN"
 
             alert_counts[lvl] += 1
-            fail_prob = float(1.0 / (1.0 + math.exp(6.8 * (cal_fs - 1.0)))) * 100.0
+            fail_prob = float(1.0 / (1.0 + math.exp(6.8 * (dynamic_fs - 1.0)))) * 100.0
 
             # Store in DB
             cur.execute("""

@@ -135,17 +135,23 @@ def fetch_batch_expanded_weather(
                     cur = data.get("current", {})
                     hourly = data.get("hourly", {})
                     precip_hourly = hourly.get("precipitation", [])
-                    temp_hourly = hourly.get("temperature_2m", [])
+                    raw_temp_hourly = hourly.get("temperature_2m", [])
+                    grid_elevation = float(data.get("elevation", site_obj.elevation_m))
+
+                    # Apply adiabatic lapse-rate (-6.5°C/km) from grid-cell elevation to true station altitude
+                    elev_diff_km = (site_obj.elevation_m - grid_elevation) / 1000.0
+                    temp_lapse_offset = -6.5 * elev_diff_km
+                    temp_hourly = [t + temp_lapse_offset for t in raw_temp_hourly]
 
                     # 72-hour cumulative precipitation (past 72 hours)
                     past_72_rain = precip_hourly[:72] if len(precip_hourly) >= 72 else precip_hourly
                     rain_72h = float(sum(past_72_rain)) if past_72_rain else float(cur.get("precipitation", 0.0) * 12.0)
                     rain_peak_1h = float(max(past_72_rain)) if past_72_rain else float(cur.get("precipitation", 0.0))
 
-                    # Positive Degree Days (thermal melt above 0°C)
+                    # Positive Degree Days (thermal melt above 0°C at site elevation)
                     pdd_days = sum(max(0.0, t) for t in temp_hourly[:72]) / 24.0 if temp_hourly else 0.0
 
-                    temp_2m = float(cur.get("temperature_2m", 12.0))
+                    temp_2m = float(cur.get("temperature_2m", 12.0)) + temp_lapse_offset
                     surf_pres = float(cur.get("surface_pressure", 850.0))
                     std_pres = compute_standard_barometric_pressure(site_obj.elevation_m)
                     pres_deficit = surf_pres - std_pres  # Negative = deep low-pressure depression

@@ -665,16 +665,19 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
     if wind_surcharge >= 0.40:
         triggers.append("WIND_BLOWN_CORNICE_SURCHARGE")
 
-    if static_fs < 1.0 and len(triggers) >= 1:
+    # Real-Time Dynamic Live Stability Alert Matrix (Evaluates physical hazard under live weather right now)
+    if dyn_fs < 1.0 and len(triggers) >= 1:
         alert_lvl = "RED"
-    elif static_fs < 1.05 or len(triggers) >= 2:
+    elif dyn_fs < 1.0 or len(triggers) >= 2:
         alert_lvl = "ORANGE"
-    elif static_fs < 1.25 or len(triggers) == 1:
+    elif dyn_fs < 1.25 or len(triggers) == 1:
         alert_lvl = "YELLOW"
     else:
         alert_lvl = "GREEN"
 
-    fail_prob_pct = float(1.0 / (1.0 + math.exp(6.8 * (static_fs - 1.0)))) * 100.0
+    fail_prob_pct = float(1.0 / (1.0 + math.exp(6.8 * (dyn_fs - 1.0)))) * 100.0
+    report_timestamp_utc = now_utc
+    report_timestamp_human = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(now_utc))
 
     # 22 Data Ingestion Points with Refresh Rates & Last Refresh Timestamps
     ingestion_points = [
@@ -728,7 +731,9 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
         "risk_evaluation": {
             "alert_level": alert_lvl,
             "static_fs": round(static_fs, 3),
+            "static_fs_description": "Baseline terrain susceptibility score under saturated conditions (permanent geometry)",
             "dynamic_fs": round(dyn_fs, 3),
+            "dynamic_fs_description": "Actual real-time physical stability factor of safety under current live weather & seismic telemetry",
             "failure_probability_pct": round(fail_prob_pct, 1),
             "soil_depth_z_m": round(syn["z_m"], 2),
             "cohesion_c_prime_kpa": round(syn["c_prime_kpa"], 2),
@@ -736,12 +741,20 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
             "water_table_zw_m": round(syn["z_w_m"], 2),
             "saturation_pct": round(syn["saturation_ratio"] * 100, 1),
             "active_triggers": triggers,
-            "stability_status": "CRITICAL" if static_fs < 1.0 else "WATCH" if static_fs < 1.25 else "SAFE",
+            "stability_status": "CRITICAL" if dyn_fs < 1.0 else "WATCH" if dyn_fs < 1.25 else "SAFE",
         },
+        "report_generated_at_utc": report_timestamp_utc,
+        "report_generated_at_human": report_timestamp_human,
         "ingestion_points": ingestion_points,
         "settlement_impacts": impacted_villages,
         "civil_protection_broadcast": bilingual_broadcast,
     }
+
+
+@router.post("/sites/{site_id}/recalculate")
+def recalculate_site_report(site_id: str) -> Dict[str, object]:
+    """Force an immediate re-fetch of live weather and re-run physics calculations for a site."""
+    return get_site_risk_analysis_report(site_id)
 
 
 @router.get("/feedback/ground-truth")

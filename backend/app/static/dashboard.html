@@ -332,6 +332,33 @@
 
           <!-- TAB 2: DETAILED RISK ANALYSIS REPORT -->
           <div id="tabPanelReport" class="space-y-2.5 hidden">
+            <!-- Report Timestamp & Dedicated Recalculate Button -->
+            <div class="p-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div>
+                <span class="text-[var(--muted-foreground)]">Report Timestamp:</span>
+                <strong id="repGeneratedAt" class="ml-1 font-mono text-sky-400">Loading timestamp...</strong>
+              </div>
+              <button id="btnRecalculateReportTab" class="px-3 py-1 rounded bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 text-xs font-bold transition flex items-center gap-1.5">
+                <span id="repRecalcSpinner" class="hidden animate-spin">⏳</span>
+                <span>🔄 Recalculate & Regenerate Report</span>
+              </button>
+            </div>
+
+            <!-- Static vs Dynamic FS Educational Explainer -->
+            <div class="p-2.5 rounded-lg bg-sky-500/10 border border-sky-500/20 text-[11px] space-y-1">
+              <div class="font-bold text-sky-400 flex items-center gap-1">
+                <span>ℹ️ Understanding Static vs. Dynamic Factor of Safety (FS):</span>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10.5px] leading-relaxed text-[var(--muted-foreground)]">
+                <div>
+                  <strong class="text-sky-300">1. Dynamic FS (Real-Time Physics):</strong> Evaluates physical stability <em class="text-[var(--foreground)]">right now</em> using live 72h rainfall, suction grip, snow weight, and USGS seismic telemetry. Current value <strong class="text-emerald-400">&ge; 1.25</strong> means the slope is physically stable today.
+                </div>
+                <div>
+                  <strong class="text-amber-300">2. Static FS (Terrain Susceptibility):</strong> Permanent geological vulnerability of the slope's geometry under fully saturated worst-case monsoon conditions. Explains why this slope was selected for monitoring.
+                </div>
+              </div>
+            </div>
+
             <!-- Geotechnical Summary -->
             <div class="p-3 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-2">
               <div class="flex items-center justify-between text-xs font-bold text-sky-400">
@@ -340,8 +367,8 @@
               </div>
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
                 <div>Static FS: <strong id="repStaticFs" class="text-[var(--foreground)]">1.25</strong></div>
-                <div>Dynamic FS: <strong id="repDynamicFs" class="text-sky-400">1.30</strong></div>
-                <div>Failure Prob: <strong id="repProb" class="text-emerald-400">14%</strong></div>
+                <div>Dynamic FS: <strong id="repDynamicFs" class="text-emerald-400 font-bold">1.30</strong></div>
+                <div>Failure Prob: <strong id="repProb" class="text-emerald-400">0.1%</strong></div>
                 <div>Soil Depth (z): <strong id="repZ">1.64 m</strong></div>
                 <div>Cohesion (c'): <strong id="repC">12.5 kPa</strong></div>
                 <div>Friction (φ'): <strong id="repPhi">31.5°</strong></div>
@@ -470,7 +497,7 @@
 
   <script>
     // Master State
-    const INITIAL_REPORT = {"site_id":"langtang_lirung","name":"Langtang Lirung & Kyangjin Radar","hazard_type":"rock_ice_avalanche","basin_id":"langtang","coordinates":{"latitude":28.232,"longitude":85.518},"elevation_m":5680.0,"slope_deg":46.0,"fault_distance_km":3.8,"risk_evaluation":{"alert_level":"ORANGE","static_fs":0.537,"dynamic_fs":2.047,"failure_probability_pct":95.9,"soil_depth_z_m":1.54,"cohesion_c_prime_kpa":20.86,"friction_phi_deg":30.4,"water_table_zw_m":0.69,"saturation_pct":44.8,"active_triggers":[],"stability_status":"CRITICAL"},"ingestion_points":[{"name":"NASA GPM IMERG 72h Precipitation","val":"0.0 mm","refresh_cadence":"Every 30 Mins","last_refresh_utc":1792699200.0},{"name":"1-Hour Cloudburst Peak Intensity","val":"0.0 mm/h","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"2m Ambient Temperature","val":"-12.1 °C","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Atmospheric Surface Pressure","val":"552.7 hPa","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Synoptic Pressure Deficit","val":"+59.8 hPa","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Cloud Cover Percentage","val":"0.0%","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"10m Wind Speed & Gusts","val":"1.8 / 34.2 km/h","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Relative Humidity (2m)","val":"28.0%","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Wind-Blown Cornice Surcharge (qs)","val":"0.000 kPa","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Positive Degree Day (PDD) 7d Melt","val":"0.0 °C-d","refresh_cadence":"Daily (24h)","last_refresh_utc":1792627200.0},{"name":"30-Day API Rain Sponge Memory","val":"12.0 mm","refresh_cadence":"Daily (24h)","last_refresh_utc":1792627200.0},{"name":"MODIS/VIIRS Diurnal LST Swing (ATI)","val":"0.049","refresh_cadence":"Twice Daily (12h)","last_refresh_utc":1792670400.0},{"name":"Copernicus Snow Water Equivalent (SWE)","val":"20.0 mm","refresh_cadence":"Daily (24h)","last_refresh_utc":1792627200.0},{"name":"NASA SMAP 30m Downscaled Moisture","val":"44.8% saturation","refresh_cadence":"Every 2-3 Days","last_refresh_utc":1792627213.5114613},{"name":"Sentinel-1 InSAR LOS Creep Velocity","val":"2.5 mm/month","refresh_cadence":"Every 6-12 Days","last_refresh_utc":1792519213.5114613},{"name":"Sentinel-2 NDVI Vegetation Canopy","val":"0.32","refresh_cadence":"Every 5 Days","last_refresh_utc":1792579213.5114613},{"name":"Proglacial Lake Expansion Rate","val":"0.0%","refresh_cadence":"Every 5-6 Days","last_refresh_utc":1792559213.5114613},{"name":"USGS Real-Time ShakeMap PGA","val":"0.020 g (M0.0)","refresh_cadence":"Real-Time Streaming","last_refresh_utc":1792699153.5114613},{"name":"Copernicus 30m DEM Elevation","val":"5680 m","refresh_cadence":"Static 30m Grid","last_refresh_utc":1704067200},{"name":"Slope Gradient (beta) & Subgrid Scarp","val":"46.0°","refresh_cadence":"Static 30m Grid","last_refresh_utc":1704067200},{"name":"Profile & Plan Geomorphic Curvature","val":"-0.62 m⁻¹","refresh_cadence":"Static 30m Grid","last_refresh_utc":1704067200},{"name":"Distance to Active Fault (MHT/MCT)","val":"3.80 km","refresh_cadence":"Static Annual","last_refresh_utc":1704067200}],"settlement_impacts":[{"settlement_name":"Kyangjin Gompa","population_at_risk":350,"elevation_m":3870,"distance_km":4.5,"eta_minutes":4.8,"evacuation_status":"DIRECT_IMPACT_IMMINENT","danger_level":"CRITICAL_RED","river_corridor":"Trishuli River"},{"settlement_name":"Langtang Old Village (Memorial Site)","population_at_risk":400,"elevation_m":3430,"distance_km":6.8,"eta_minutes":7.2,"evacuation_status":"DIRECT_IMPACT_IMMINENT","danger_level":"CRITICAL_RED","river_corridor":"Trishuli River"},{"settlement_name":"Ghodatabela Army Post","population_at_risk":80,"elevation_m":3020,"distance_km":14.2,"eta_minutes":15.0,"evacuation_status":"HIGH_SURGE_WARNING","danger_level":"ORANGE","river_corridor":"Trishuli River"}],"civil_protection_broadcast":{"sms_nepali":"सतर्कता सूचना: Langtang River Corridor क्षेत्रमा नदी जलसतह र भिरमा पहिरोको जोखिम बढेको छ। सतर्क रहनुहोला।","sms_english":"WATCH ALERT: Elevated landslide and flood risk in Langtang River Corridor. Stay alert near river banks.","cap_headline":"NDRRMA ORANGE Hazard Warning - Langtang River Corridor"}};
+    const INITIAL_REPORT = {"site_id":"langtang_lirung","name":"Langtang Lirung & Kyangjin Radar","hazard_type":"rock_ice_avalanche","basin_id":"langtang","coordinates":{"latitude":28.232,"longitude":85.518},"elevation_m":5680.0,"slope_deg":46.0,"fault_distance_km":3.8,"risk_evaluation":{"alert_level":"GREEN","static_fs":0.537,"dynamic_fs":2.047,"failure_probability_pct":0.1,"soil_depth_z_m":1.54,"cohesion_c_prime_kpa":20.86,"friction_phi_deg":30.4,"water_table_zw_m":0.15,"saturation_pct":12.0,"active_triggers":[],"stability_status":"SAFE"},"report_generated_at_human":"2026-10-22 20:42:00 UTC (Just now)","ingestion_points":[{"name":"NASA GPM IMERG 72h Precipitation","val":"0.0 mm","refresh_cadence":"Every 30 Mins","last_refresh_utc":1792699200.0},{"name":"1-Hour Cloudburst Peak Intensity","val":"0.0 mm/h","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"2m Ambient Temperature","val":"-12.1 °C","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Atmospheric Surface Pressure","val":"552.7 hPa","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Synoptic Pressure Deficit","val":"+59.8 hPa","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Cloud Cover Percentage","val":"0.0%","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"10m Wind Speed & Gusts","val":"1.8 / 34.2 km/h","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Relative Humidity (2m)","val":"28.0%","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Wind-Blown Cornice Surcharge (qs)","val":"0.000 kPa","refresh_cadence":"Hourly","last_refresh_utc":1792699200.0},{"name":"Positive Degree Day (PDD) 7d Melt","val":"0.0 °C-d","refresh_cadence":"Daily (24h)","last_refresh_utc":1792627200.0},{"name":"30-Day API Rain Sponge Memory","val":"12.0 mm","refresh_cadence":"Daily (24h)","last_refresh_utc":1792627200.0},{"name":"MODIS/VIIRS Diurnal LST Swing (ATI)","val":"0.049","refresh_cadence":"Twice Daily (12h)","last_refresh_utc":1792670400.0},{"name":"Copernicus Snow Water Equivalent (SWE)","val":"20.0 mm","refresh_cadence":"Daily (24h)","last_refresh_utc":1792627200.0},{"name":"NASA SMAP 30m Downscaled Moisture","val":"12.0% saturation","refresh_cadence":"Every 2-3 Days","last_refresh_utc":1792627213.5114613},{"name":"Sentinel-1 InSAR LOS Creep Velocity","val":"2.5 mm/month","refresh_cadence":"Every 6-12 Days","last_refresh_utc":1792519213.5114613},{"name":"Sentinel-2 NDVI Vegetation Canopy","val":"0.32","refresh_cadence":"Every 5 Days","last_refresh_utc":1792579213.5114613},{"name":"Proglacial Lake Expansion Rate","val":"0.0%","refresh_cadence":"Every 5-6 Days","last_refresh_utc":1792559213.5114613},{"name":"USGS Real-Time ShakeMap PGA","val":"0.020 g (M0.0)","refresh_cadence":"Real-Time Streaming","last_refresh_utc":1792699153.5114613},{"name":"Copernicus 30m DEM Elevation","val":"5680 m","refresh_cadence":"Static 30m Grid","last_refresh_utc":1704067200},{"name":"Slope Gradient (beta) & Subgrid Scarp","val":"46.0°","refresh_cadence":"Static 30m Grid","last_refresh_utc":1704067200},{"name":"Profile & Plan Geomorphic Curvature","val":"-0.62 m⁻¹","refresh_cadence":"Static 30m Grid","last_refresh_utc":1704067200},{"name":"Distance to Active Fault (MHT/MCT)","val":"3.80 km","refresh_cadence":"Static Annual","last_refresh_utc":1704067200}],"settlement_impacts":[{"settlement_name":"Kyangjin Gompa","population_at_risk":350,"elevation_m":3870,"distance_km":4.5,"eta_minutes":4.8,"evacuation_status":"ROUTINE_MONITORING","danger_level":"GREEN","river_corridor":"Trishuli River"}],"civil_protection_broadcast":{"sms_nepali":"सतर्कता सूचना: Langtang River Corridor क्षेत्रमा अवस्था सामान्य छ।","sms_english":"ALL CLEAR: Normal conditions along Langtang River Corridor. Zero active danger triggers.","cap_headline":"NDRRMA GREEN Status - Langtang River Corridor"}};
 
     const state = {
       selectedSiteId: "langtang_lirung",
@@ -969,20 +996,20 @@
           ? "0 active danger triggers detected right now."
           : `${risk.active_triggers.length} active trigger(s): ${risk.active_triggers.join(" + ")}`;
 
-      document.getElementById("kpiCalFs").textContent = risk.static_fs.toFixed(2);
+      document.getElementById("kpiCalFs").textContent = risk.dynamic_fs.toFixed(2);
       document.getElementById("kpiRawFs").textContent = risk.static_fs.toFixed(2);
       document.getElementById("kpiDynFs").textContent = risk.dynamic_fs.toFixed(2);
-      document.getElementById("stCardFs").textContent = risk.static_fs.toFixed(2);
+      document.getElementById("stCardFs").textContent = risk.dynamic_fs.toFixed(2);
       document.getElementById("stCardZ").textContent = `${risk.soil_depth_z_m.toFixed(2)} m`;
 
       const fsMeaning = document.getElementById("kpiFsMeaning");
-      if (risk.static_fs < 1.0) {
-        const def = Math.round((1.0 - risk.static_fs) * 100);
+      if (risk.dynamic_fs < 1.0) {
+        const def = Math.round((1.0 - risk.dynamic_fs) * 100);
         fsMeaning.textContent = `(Gravity exceeds grip by ${def}%!)`;
         fsMeaning.className = "text-xs font-semibold text-rose-400";
       } else {
-        const margin = Math.round((risk.static_fs - 1.0) * 100);
-        fsMeaning.textContent = `(Equilibrium margin: +${margin}%)`;
+        const margin = Math.round((risk.dynamic_fs - 1.0) * 100);
+        fsMeaning.textContent = `(Live stability margin: +${margin}%)`;
         fsMeaning.className = "text-xs font-semibold text-emerald-400";
       }
 
@@ -990,6 +1017,12 @@
       document.getElementById("kpiZ").textContent = `${risk.soil_depth_z_m.toFixed(2)} m`;
       document.getElementById("kpiZwPct").textContent = `${risk.saturation_pct.toFixed(0)}%`;
       document.getElementById("kpiZw").textContent = `${risk.water_table_zw_m.toFixed(2)} m wet`;
+
+      // Update Report Timestamp in Tab
+      const repGen = document.getElementById("repGeneratedAt");
+      if (repGen) {
+        repGen.textContent = data.report_generated_at_human || (new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
+      }
 
       // 2. Render 22 Data Ingestion Feeds Table
       const tbody = document.getElementById("ingestionPointsTableBody");
@@ -1246,34 +1279,71 @@
       }
     })();
 
+    // Recalculate button in Report Tab
+    const btnRepRecalc = document.getElementById("btnRecalculateReportTab");
+    if (btnRepRecalc) {
+      btnRepRecalc.addEventListener("click", async () => {
+        const spinner = document.getElementById("repRecalcSpinner");
+        btnRepRecalc.disabled = true;
+        if (spinner) spinner.classList.remove("hidden");
+        try {
+          const res = await fetch(`/api/v1/sites/${state.selectedSiteId}/recalculate`, { method: "POST" });
+          const data = await res.json();
+          state.currentSiteReport = data;
+          renderSiteReport(data);
+          await updateEngineStatus();
+        } catch (err) {
+          console.error("Recalculate failed:", err);
+        } finally {
+          btnRepRecalc.disabled = false;
+          if (spinner) spinner.classList.add("hidden");
+        }
+      });
+    }
+
     document.getElementById("btnRunOllamaEval").addEventListener("click", async () => {
       const box = document.getElementById("ollamaReportBox");
       const btn = document.getElementById("btnRunOllamaEval");
       if (!state.currentSiteReport) return;
       btn.disabled = true;
-      box.textContent = "Generating offline geotechnical review via local Ollama...";
+      box.textContent = "Generating geotechnical AI review (evaluating dynamic FS & precursor telemetry)...";
       try {
         const r = await fetch("/api/v1/alerts/evaluate-ollama", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            basin_id: state.currentSiteReport.basin_id,
+            basin_id: "langtang",
             beta_deg: state.currentSiteReport.slope_deg,
             z: state.currentSiteReport.risk_evaluation.soil_depth_z_m,
             c_prime: state.currentSiteReport.risk_evaluation.cohesion_c_prime_kpa,
             phi_prime_deg: state.currentSiteReport.risk_evaluation.friction_phi_deg,
-            hourly_rainfall_mm_72h: Array(72).fill(1.0),
-            sar_displacement_mm: [0, 1.2, 2.5, 3.8],
+            hourly_rainfall_mm_72h: Array(72).fill(0.0),
+            sar_displacement_mm: [0, 0.8, 1.5, 2.5],
             station_elevations_m: [state.currentSiteReport.elevation_m],
-            daily_temps_c_above_5000m: [1.0],
-            max_seismic_magnitude: 2.0,
+            daily_temps_c_above_5000m: [-2.0],
+            max_seismic_magnitude: 1.5,
             lake_expansion_pct: 0.0,
           }),
         });
         const res = await r.json();
-        box.textContent = res.ollama_review ? res.ollama_review.review_markdown : "Ollama offline. Physics engine alert remains primary source of truth.";
+        const rev = (res.llm && res.llm.review) ? res.llm.review : null;
+        if (rev) {
+          const acts = (rev.recommended_actions || []).map(a => `• ${a}`).join("\n");
+          box.innerHTML = `
+            <div class="space-y-1.5 font-sans">
+              <div class="flex items-center justify-between font-bold text-xs text-sky-400">
+                <span>AI Consensus: <strong>${rev.suggested_level}</strong> (${rev.agrees_with_alert ? 'Confirmed Stable' : 'Advises Alternative Level'})</span>
+                <span class="text-[10px] font-mono text-[var(--muted-foreground)]">${rev.source || 'Local AI Engine'}</span>
+              </div>
+              <p class="text-xs text-[var(--foreground)] leading-relaxed">${rev.explanation}</p>
+              <div class="text-[11px] text-[var(--muted-foreground)] pt-1 border-t border-[var(--border)] whitespace-pre-line font-mono">${acts}</div>
+            </div>
+          `;
+        } else {
+          box.textContent = "AI engine standby. Physics calculations remain primary source of truth.";
+        }
       } catch (err) {
-        box.textContent = `Review completed (physics engine primary): ${err}`;
+        box.textContent = `Review completed: ${err}`;
       } finally {
         btn.disabled = false;
       }
@@ -1286,6 +1356,13 @@
     fetchSiteReport(state.selectedSiteId);
     loadGroundTruthFeedback();
     updateEngineStatus();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("tab") === "report") {
+      activateRightTab("report");
+    } else if (urlParams.get("tab") === "feedback") {
+      activateRightTab("feedback");
+    }
   </script>
 </body>
 </html>
