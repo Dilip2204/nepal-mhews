@@ -159,6 +159,14 @@ nepal-mhews/
 
 ## 8. Operational Environment & Open Data Rules (Synced from Subsidiary Agent Memory)
 
+### 8.4 Future Architecture: Online / Continual Model Retraining with Live Data Tracking
+- **Objective:** Continuously adapt and retrain the Tier A ML susceptibility and Tier B anomaly models as live satellite telemetry (Sentinel-1 InSAR velocity, Open-Meteo/IMERG rainfall, seismic triggers) and newly confirmed landslide events stream into the platform.
+- **Continuous Learning Design:**
+  1. **Telemetry Ingestion Hypertable:** Live 30-minute sensor tracks are staged into TimescaleDB tables (`sensor_telemetry`, `basin_alert_log`).
+  2. **Automated Event Labeling:** Verified ground truth reports (e.g. from district disaster management authorities or optical cloud-free post-event Sentinel-2 NDWI/NDVI diffs) append new positive labels.
+  3. **Zero-Catastrophic-Forgetting Fine-Tuning:** Use online incremental updates (e.g. `XGBClassifier(warm_start=True)` or moving-window stochastic gradient updates with elastic weight consolidation) to calibrate differential block offsets ($\Delta FS_{\text{offset}}$, $c'_{\text{mult}}$, $z_{\text{mult}}$) without losing high-mountain cryosphere anchor accuracy.
+  4. **Automated Validation Gate:** A newly retrained model version is only promoted to production if it beats the baseline spatial-holdout recall ($>91.4\%$) and maintains the $<15\%$ physical deviation envelope across high-altitude blocks.
+
 ### 8.1 Mandatory Shared-Server Thread Caps (`256-Core Host`)
 - **Rule:** ALWAYS set `OMP_NUM_THREADS=4`, `OPENBLAS_NUM_THREADS=4`, `MKL_NUM_THREADS=4`, `NUMEXPR_NUM_THREADS=4` and pass `n_jobs=4` / `nthread=4` to XGBoost/scikit-learn/PyTorch **before** running any model training or heavy vectorized computation.
 - **Reason:** This host is a shared 256-core server; unconstrained `XGBClassifier.fit()` spawns ~136 threads and stalls due to OpenMP/BLAS nested-parallelism oversubscription.
