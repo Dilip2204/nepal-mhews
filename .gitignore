@@ -1,0 +1,31 @@
+# Python virtual environments & caches
+.venv/
+venv/
+backend/.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# Node / Frontend build & dependencies
+node_modules/
+frontend/node_modules/
+frontend/dist/
+.vite/
+
+# Raw external multi-megabyte data dumps (processed Nepal CSVs in backend/data/processed/ are tracked)
+data/raw/
+*.tif
+*.tiff
+*.nc
+
+# Local environment & IDE / agent lockfiles
+.env
+.env.local
+.claude/
+.DS_Store

@@ -1,0 +1,64 @@
+version: "3.9"
+
+services:
+  db:
+    image: timescale/timescaledb-ha:pg16
+    container_name: nepal-mhews-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mhews}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mhews_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-nepal_mhews}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/home/postgres/pgdata/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mhews -d nepal_mhews"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: nepal-mhews-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nepal-mhews-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg2://mhews:mhews_secret@db:5432/nepal_mhews
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: development
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    image: node:20-alpine
+    container_name: nepal-mhews-frontend
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000/api/v1
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
