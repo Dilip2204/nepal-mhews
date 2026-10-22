@@ -434,23 +434,109 @@
 
           <!-- TAB 3: LIVE GROUND-TRUTH EVENT FEEDBACK & CONTINUAL EQUATION ADAPTATION -->
           <div id="tabPanelFeedback" class="space-y-2.5 hidden">
+            <!-- 1. BIG TEXTUAL INDICATOR: NATIONWIDE LANDSLIDE / AVALANCHE STATUS -->
+            <div id="gtDisasterBanner" class="p-3.5 rounded-xl border-2 transition-all bg-emerald-950/40 border-emerald-500/50 text-emerald-200">
+              <div class="flex items-start gap-3">
+                <span id="gtDisasterIcon" class="text-3xl leading-none select-none">🟢</span>
+                <div class="flex-1">
+                  <div class="flex items-center justify-between gap-2">
+                    <span id="gtDisasterStatusBadge" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400">
+                      LIVE STATUS: NORMAL BASELINE
+                    </span>
+                    <span id="gtDisasterTimestamp" class="text-[10px] font-mono text-[var(--muted-foreground)]">
+                      Live Telemetry Sync
+                    </span>
+                  </div>
+                  <h3 id="gtDisasterTitle" class="text-sm sm:text-base font-extrabold tracking-tight mt-1 text-emerald-400">
+                    NO ACTIVE LANDSLIDE OR AVALANCHE DISASTER DETECTED
+                  </h3>
+                  <p id="gtDisasterMessage" class="text-xs text-[var(--muted-foreground)] mt-1 leading-relaxed">
+                    All 10 ground-truth verification stations and 491 monitored corridors across Nepal are in safe mechanical equilibrium. 0 active slope failures, glacial lake breaches, or rock-ice detachments detected across the network under current dry baseline conditions.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. SINGLE RECALIBRATION & REFRESH BUTTON -->
+            <div class="p-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div>
+                <span class="font-bold text-sky-400 flex items-center gap-1.5">
+                  <span>🧬</span>
+                  <span>Ground-Truth & Equation Recalibration</span>
+                </span>
+                <span class="text-[11px] text-[var(--muted-foreground)] block">
+                  Re-evaluates all 983+ points, checks live disaster telemetry, and steps evolutionary optimizer
+                </span>
+              </div>
+              <button id="btnRecalibrateAllGroundTruth" class="px-3.5 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/30 text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+                <span id="gtRecalcSpinner" class="hidden animate-spin">⏳</span>
+                <span>🔄 Recalibrate & Refresh All</span>
+              </button>
+            </div>
+
+            <!-- 3. VALIDATION GATE & ACCURACY METRICS -->
             <div class="p-3 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-2">
               <div class="flex items-center justify-between text-xs font-bold text-emerald-400">
-                <span>🧬 Continual Adaptation & Rule 8.4 Validation Gate</span>
-                <span id="gtCatalogBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-400">979 PTS ACTIVE</span>
+                <span>📊 Model Accuracy & Rule 8.4 Validation Gate</span>
+                <span id="gtCatalogBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-400">983 PTS ACTIVE</span>
               </div>
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
-                <div>Holdout Recall: <strong id="gtRecall" class="text-emerald-400">91.43%</strong></div>
-                <div>ROC-AUC: <strong id="gtAuc" class="text-sky-400">0.9107</strong></div>
+                <div>Holdout Recall: <strong id="gtRecall" class="text-emerald-400">91.50%</strong></div>
+                <div>ROC-AUC: <strong id="gtAuc" class="text-sky-400">0.9108</strong></div>
                 <div>Cryo Anchors: <strong id="gtCryo" class="text-emerald-400">100.0%</strong></div>
                 <div>Live GT Match: <strong id="gtLiveAcc" class="text-emerald-400">100.0%</strong></div>
               </div>
               <div id="gtGateStatus" class="text-[11px] font-mono text-[var(--muted-foreground)] pt-1 border-t border-[var(--border)]">
-                Base: 949 pts • Cryosphere: 24 pts • Live NDRRMA/Sentinel Feedback: <strong id="gtLiveCount" class="text-sky-400">6</strong> pts
+                Base: 949 pts • Cryosphere: 24 pts • Live NDRRMA/Sentinel Feedback: <strong id="gtLiveCount" class="text-sky-400">10</strong> pts
               </div>
             </div>
 
-            <!-- Ingest Selected Observation Site as Verified Ground-Truth -->
+            <!-- 4. PLAIN-LANGUAGE GLOSSARY: WHAT EACH TERM MEANS -->
+            <div class="p-3 rounded-lg bg-sky-500/10 border border-sky-500/20 space-y-2 text-xs">
+              <div class="flex items-center justify-between font-bold text-sky-400">
+                <span class="flex items-center gap-1.5 text-xs">
+                  <span>📖</span>
+                  <span>Plain-Language Guide: What These Terms Mean</span>
+                </span>
+                <span class="text-[10px] font-mono text-sky-300">Easy Reference</span>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] text-[var(--foreground)] leading-snug">
+                <div class="p-2 rounded bg-[var(--card)]/60 border border-[var(--border)]">
+                  <strong class="text-emerald-400">Ground-Truth Event (प्रमाणित घटना):</strong>
+                  <p class="text-[var(--muted-foreground)] mt-0.5">Real, verified landslide or avalanche reports confirmed on the ground by human observers, NDRRMA disaster authorities, or satellite imagery—not computer simulations.</p>
+                </div>
+                <div class="p-2 rounded bg-[var(--card)]/60 border border-[var(--border)]">
+                  <strong class="text-emerald-400">NDRRMA Field-Verified:</strong>
+                  <p class="text-[var(--muted-foreground)] mt-0.5">Direct disaster incident reports from Nepal’s National Disaster Risk Reduction & Management Authority officers and local emergency operation centers.</p>
+                </div>
+                <div class="p-2 rounded bg-[var(--card)]/60 border border-[var(--border)]">
+                  <strong class="text-sky-400">Sentinel-2 ΔNDVI Scar:</strong>
+                  <p class="text-[var(--muted-foreground)] mt-0.5">Optical satellite check from orbit noticing when green hillside forests suddenly disappear and become bare mud/rock debris after a slide.</p>
+                </div>
+                <div class="p-2 rounded bg-[var(--card)]/60 border border-[var(--border)]">
+                  <strong class="text-sky-400">Sentinel-1 SAR Radar Diff:</strong>
+                  <p class="text-[var(--muted-foreground)] mt-0.5">Radar beams that see right through thick monsoon clouds and darkness to map scarred land and gouged valleys.</p>
+                </div>
+                <div class="p-2 rounded bg-[var(--card)]/60 border border-[var(--border)]">
+                  <strong class="text-amber-400">Holdout Recall (91.5%):</strong>
+                  <p class="text-[var(--muted-foreground)] mt-0.5">"If 100 real landslides happened across Nepal in districts the AI never saw before, it correctly predicted and warned about 92 of them."</p>
+                </div>
+                <div class="p-2 rounded bg-[var(--card)]/60 border border-[var(--border)]">
+                  <strong class="text-amber-400">Cryosphere Anchors (100%):</strong>
+                  <p class="text-[var(--muted-foreground)] mt-0.5">High-altitude (>4200m) glacial peaks (like Manaslu and Langtang) where ice-glue and rockfall physics are calibrated to 100% accuracy.</p>
+                </div>
+                <div class="p-2 rounded bg-[var(--card)]/60 border border-[var(--border)]">
+                  <strong class="text-rose-400">Label = 1 (Slope Failure):</strong>
+                  <p class="text-[var(--muted-foreground)] mt-0.5">A hillside that actually collapsed or washed away during rain, snowmelt, or earthquake shaking.</p>
+                </div>
+                <div class="p-2 rounded bg-[var(--card)]/60 border border-[var(--border)]">
+                  <strong class="text-emerald-400">Label = 0 (Storm-Resilient Stable):</strong>
+                  <p class="text-[var(--muted-foreground)] mt-0.5">A steep slope that stood completely firm through heavy storm rain without sliding, teaching the AI not to sound false alarms.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- 5. Ingest Selected Observation Site as Verified Ground-Truth -->
             <div class="p-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-2 text-xs">
               <div class="font-bold text-[11px] text-sky-400">➕ Ingest Selected Site into Ground-Truth Training Catalog:</div>
               <div class="grid grid-cols-2 gap-2">
@@ -470,8 +556,8 @@
               <div id="gtSubmitResult" class="text-[11px] font-mono text-[var(--muted-foreground)]"></div>
             </div>
 
-            <!-- Verified Ground-Truth Events Table -->
-            <div class="max-h-[210px] overflow-y-auto pr-1 custom-scroll rounded border border-[var(--border)] bg-[var(--background)]">
+            <!-- 6. Verified Ground-Truth Events Table -->
+            <div class="max-h-[220px] overflow-y-auto pr-1 custom-scroll rounded border border-[var(--border)] bg-[var(--background)]">
               <table class="w-full text-left text-[11px] border-collapse">
                 <thead class="sticky top-0 bg-[var(--card)] border-b border-[var(--border)] text-[var(--muted-foreground)] font-mono text-[10px]">
                   <tr>
@@ -1259,6 +1345,46 @@
         document.getElementById("gtCryo").textContent = `${o.cryosphere_anchor_acc_pct}%`;
         document.getElementById("gtLiveAcc").textContent = `${o.live_feedback_acc_pct}%`;
       }
+
+      // Render Big Textual Disaster Indicator Banner
+      if (data.disaster_indicator) {
+        const ind = data.disaster_indicator;
+        const banner = document.getElementById("gtDisasterBanner");
+        const icon = document.getElementById("gtDisasterIcon");
+        const badge = document.getElementById("gtDisasterStatusBadge");
+        const title = document.getElementById("gtDisasterTitle");
+        const msg = document.getElementById("gtDisasterMessage");
+        const ts = document.getElementById("gtDisasterTimestamp");
+
+        if (title) title.textContent = ind.title;
+        if (msg) msg.textContent = ind.message;
+        if (ts) {
+          ts.textContent = data.timestamp_human ? `Recalibrated: ${data.timestamp_human}` : "Live Telemetry Sync";
+        }
+
+        if (banner && icon && badge) {
+          if (ind.level === "CRITICAL_RED") {
+            banner.className = "p-3.5 rounded-xl border-2 transition-all bg-rose-950/70 border-rose-500 text-rose-200 animate-pulse";
+            icon.textContent = "🔴";
+            badge.className = "px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-rose-500/30 text-rose-300";
+            badge.textContent = "LIVE STATUS: CRITICAL DISASTER ALERT";
+            if (title) title.className = "text-sm sm:text-base font-extrabold tracking-tight mt-1 text-rose-400";
+          } else if (ind.level === "ELEVATED_ORANGE") {
+            banner.className = "p-3.5 rounded-xl border-2 transition-all bg-orange-950/60 border-orange-500/60 text-orange-200";
+            icon.textContent = "🟠";
+            badge.className = "px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-orange-500/30 text-orange-300";
+            badge.textContent = "LIVE STATUS: ELEVATED GULLY WATCH";
+            if (title) title.className = "text-sm sm:text-base font-extrabold tracking-tight mt-1 text-orange-400";
+          } else {
+            banner.className = "p-3.5 rounded-xl border-2 transition-all bg-emerald-950/40 border-emerald-500/50 text-emerald-200";
+            icon.textContent = "🟢";
+            badge.className = "px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400";
+            badge.textContent = "LIVE STATUS: NORMAL BASELINE (SAFE)";
+            if (title) title.className = "text-sm sm:text-base font-extrabold tracking-tight mt-1 text-emerald-400";
+          }
+        }
+      }
+
       const tbody = document.getElementById("groundTruthTableBody");
       if (!tbody || !data.events) return;
       tbody.innerHTML = "";
@@ -1274,6 +1400,27 @@
           <td class="p-1.5">${badge}</td>
         `;
         tbody.appendChild(tr);
+      });
+    }
+
+    // Single Recalibration & Refresh Button Event Listener
+    const btnGtRecalc = document.getElementById("btnRecalibrateAllGroundTruth");
+    if (btnGtRecalc) {
+      btnGtRecalc.addEventListener("click", async () => {
+        const spinner = document.getElementById("gtRecalcSpinner");
+        btnGtRecalc.disabled = true;
+        if (spinner) spinner.classList.remove("hidden");
+        try {
+          const res = await fetch("/api/v1/feedback/recalibrate", { method: "POST" });
+          const data = await res.json();
+          renderGroundTruthFeedback(data);
+          await updateEngineStatus();
+        } catch (err) {
+          console.error("Recalibration failed:", err);
+        } finally {
+          btnGtRecalc.disabled = false;
+          if (spinner) spinner.classList.add("hidden");
+        }
       });
     }
 

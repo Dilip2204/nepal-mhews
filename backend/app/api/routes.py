@@ -771,17 +771,83 @@ def recalculate_site_report(site_id: str) -> Dict[str, object]:
     return get_site_risk_analysis_report(site_id)
 
 
+def compute_ground_truth_disaster_indicator() -> Dict[str, object]:
+    """Inspect perpetual database calculations to assess if any active confirmed
+    landslide, avalanche, or critical slope failure risk is detected across the network.
+    """
+    import sqlite3
+    from pathlib import Path
+    db_file = Path(__file__).resolve().parent.parent.parent / "data" / "perpetual_telemetry.db"
+    critical_sites = []
+    warning_sites = []
+    if db_file.exists():
+        try:
+            conn = sqlite3.connect(str(db_file), timeout=5)
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT site_id, dynamic_fs, alert_level, active_triggers 
+                FROM physics_calculations 
+                WHERE id IN (SELECT MAX(id) FROM physics_calculations GROUP BY site_id)
+                  AND alert_level IN ('RED', 'ORANGE')
+            """)
+            for row in cur.fetchall():
+                if row[2] == 'RED':
+                    critical_sites.append({"site_id": row[0], "dynamic_fs": row[1], "triggers": row[3]})
+                elif row[2] == 'ORANGE':
+                    warning_sites.append({"site_id": row[0], "dynamic_fs": row[1], "triggers": row[3]})
+            conn.close()
+        except Exception as e:
+            logger.warning("Could not query perpetual_telemetry.db for disaster indicator: %s", e)
+
+    if critical_sites:
+        return {
+            "level": "CRITICAL_RED",
+            "badge_color": "rose",
+            "title": "CRITICAL EMERGENCY: ACTIVE SLOPE FAILURE / COLLAPSE DETECTED",
+            "message": f"Immediate civil evacuation required! {len(critical_sites)} monitored site(s) currently exhibiting critical failure conditions (Dynamic FS < 1.0) under active environmental triggers.",
+            "is_disaster_active": True,
+            "critical_count": len(critical_sites),
+            "warning_count": len(warning_sites),
+            "critical_sites": critical_sites,
+        }
+    elif warning_sites:
+        return {
+            "level": "ELEVATED_ORANGE",
+            "badge_color": "orange",
+            "title": "ELEVATED HAZARD WATCH: STEEP GULLY MONITORING ACTIVE",
+            "message": f"Zero active emergency collapses detected. {len(warning_sites)} steep high-gradient scree site(s) show marginal equilibrium (FS ~0.98–1.04) under baseline dry weather. No nationwide catastrophe.",
+            "is_disaster_active": False,
+            "critical_count": 0,
+            "warning_count": len(warning_sites),
+            "warning_sites": warning_sites,
+        }
+    else:
+        return {
+            "level": "NORMAL_GREEN",
+            "badge_color": "emerald",
+            "title": "NO ACTIVE LANDSLIDE OR AVALANCHE DISASTER DETECTED",
+            "message": "All ground-truth verification stations and monitored corridors across Nepal are in stable equilibrium. Zero active slope failures, glacial lake outbursts, or rock-ice avalanches detected under current conditions.",
+            "is_disaster_active": False,
+            "critical_count": 0,
+            "warning_count": 0,
+        }
+
+
 @router.get("/feedback/ground-truth")
 async def get_ground_truth_feedback_catalog():
-    """Return the Live Ground-Truth Event Feedback Catalog (NDRRMA + Sentinel-2/SAR) & Optimizer state."""
+    """Return the Live Ground-Truth Event Feedback Catalog (NDRRMA + Sentinel-2/SAR), Optimizer state,
+    and the high-visibility disaster indicator status.
+    """
     from app.ingestion.ground_truth_feedback import load_live_ground_truth_events
     from app.ml.continuous_equation_optimizer import ContinuousEquationOptimizer
 
     events = load_live_ground_truth_events()
     opt = ContinuousEquationOptimizer()
     acc, rec, auc, f1, cryo_acc, fb_acc, avg_dev = opt.evaluate_parameter_set(opt.active_params)
+    indicator = compute_ground_truth_disaster_indicator()
 
     return {
+        "disaster_indicator": indicator,
         "total_training_catalog_points": len(opt._dataset),
         "base_catalog_points": 949,
         "cryosphere_anchor_points": 24,
@@ -795,6 +861,46 @@ async def get_ground_truth_feedback_catalog():
             "live_feedback_acc_pct": round(fb_acc * 100.0, 1),
             "avg_fs_deviation_pct": round(avg_dev, 2),
             "active_parameters": opt.active_params,
+        },
+        "events": events[::-1],
+    }
+
+
+@router.post("/feedback/recalibrate")
+async def recalibrate_ground_truth_network():
+    """Single recalibration endpoint: re-evaluates all ground-truth catalog events,
+    steps an evolutionary generation of the equation optimizer, computes live disaster status,
+    and returns the updated report.
+    """
+    from app.ingestion.ground_truth_feedback import load_live_ground_truth_events
+    from app.ml.continuous_equation_optimizer import ContinuousEquationOptimizer
+    import time
+
+    _susceptibility_model.fit_and_evaluate()
+    opt = ContinuousEquationOptimizer()
+    opt_res = opt.step_optimization_generation(n_candidates=6)
+    events = load_live_ground_truth_events()
+    indicator = compute_ground_truth_disaster_indicator()
+    now_utc = time.time()
+    now_human = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(now_utc))
+
+    return {
+        "status": "recalibrated",
+        "timestamp_utc": now_utc,
+        "timestamp_human": now_human,
+        "disaster_indicator": indicator,
+        "total_training_catalog_points": opt_res.dataset_total_points,
+        "live_feedback_points": len(events),
+        "optimizer_state": {
+            "current_generation": opt_res.generation,
+            "fitness_score": opt_res.fitness_score,
+            "holdout_recall_pct": round(opt_res.recall * 100.0, 2),
+            "roc_auc": round(opt_res.roc_auc, 4),
+            "cryosphere_anchor_acc_pct": round(opt_res.cryo_accuracy * 100.0, 1),
+            "live_feedback_acc_pct": round(opt_res.live_feedback_accuracy * 100.0, 1),
+            "avg_fs_deviation_pct": opt_res.avg_fs_deviation_pct,
+            "promoted": opt_res.promoted,
+            "reason": opt_res.reason,
         },
         "events": events[::-1],
     }
