@@ -530,54 +530,39 @@ def get_perpetual_engine_status() -> Dict[str, object]:
 @router.get("/sites")
 def list_sites_of_interest() -> List[Dict[str, object]]:
     """Return catalog of all 491+ monitored sites across Nepal with latest physics calculations."""
-    import sqlite3
-    from pathlib import Path
     from app.engine.sites_catalog import load_sites_of_interest
+    from app.core.database import get_time_series_store
 
     sites = load_sites_of_interest()
-    db_file = Path(__file__).resolve().parent.parent.parent / "data" / "perpetual_telemetry.db"
-    calc_map = {}
-
-    if db_file.exists():
-        try:
-            conn = sqlite3.connect(str(db_file), timeout=5)
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT site_id, static_fs, dynamic_fs, calibrated_fs, failure_prob_pct, alert_level, active_triggers, timestamp_utc
-                FROM physics_calculations
-                WHERE id IN (
-                    SELECT MAX(id) FROM physics_calculations GROUP BY site_id
-                )
-            """)
-            for row in cur.fetchall():
-                dyn_fs = float(row[2]) if row[2] is not None else 1.25
-                static_fs = float(row[1]) if row[1] is not None else 1.0
-                fail_prob = float(row[4]) if row[4] is not None else float(1.0 / (1.0 + math.exp(6.8 * (dyn_fs - 1.0)))) * 100.0
-                triggers = row[6].split(",") if row[6] else []
-                # Ensure alert level is strictly determined by the actual dynamic risk factor, not static FS
-                if dyn_fs < 1.0 and len(triggers) >= 1:
-                    computed_alert = "RED"
-                elif dyn_fs < 1.0 or len(triggers) >= 2:
-                    computed_alert = "ORANGE"
-                elif dyn_fs < 1.25 or len(triggers) >= 1:
-                    computed_alert = "YELLOW"
-                else:
-                    computed_alert = "GREEN"
-
-                calc_map[row[0]] = {
-                    "static_fs": static_fs,
-                    "dynamic_fs": dyn_fs,
-                    "calibrated_fs": dyn_fs,
-                    "failure_prob_pct": fail_prob,
-                    "alert_level": computed_alert,
-                    "active_triggers": triggers,
-                    "last_refresh_utc": row[7],
-                }
-            conn.close()
-        except Exception as e:
-            logger.warning("Could not query perpetual_telemetry.db: %s", e)
+    store = get_time_series_store()
+    calc_map = store.get_latest_physics_calculations()
 
     results = []
+    for s in sites:
+        c = calc_map.get(s.site_id, {
+            "static_fs": 1.25,
+            "dynamic_fs": 1.28,
+            "calibrated_fs": 1.25,
+            "failure_prob_pct": 14.5,
+            "alert_level": "GREEN",
+            "active_triggers": [],
+            "last_refresh_utc": 0.0,
+        })
+        results.append({
+            "site_id": s.site_id,
+            "name": s.name,
+            "hazard_type": s.hazard_type,
+            "latitude": s.latitude,
+            "longitude": s.longitude,
+            "elevation_m": s.elevation_m,
+            "slope_deg": s.slope_deg,
+            "profile_curvature": s.profile_curvature,
+            "local_relief_m": s.local_relief_m,
+            "fault_distance_km": s.fault_distance_km,
+            "basin_id": s.basin_id,
+            "physics": c,
+        })
+    return results
     for s in sites:
         c = calc_map.get(s.site_id, {
             "static_fs": 1.25,
@@ -772,65 +757,19 @@ def recalculate_site_report(site_id: str) -> Dict[str, object]:
 
 
 def compute_ground_truth_disaster_indicator() -> Dict[str, object]:
-    """Inspect perpetual database calculations to assess if any active confirmed
+    """Inspect time-series store calculations to assess if any active confirmed
     landslide, avalanche, or critical slope failure risk is detected across the network.
     """
-    import sqlite3
-    from pathlib import Path
-    db_file = Path(__file__).resolve().parent.parent.parent / "data" / "perpetual_telemetry.db"
-    critical_sites = []
-    warning_sites = []
-    if db_file.exists():
-        try:
-            conn = sqlite3.connect(str(db_file), timeout=5)
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT site_id, dynamic_fs, alert_level, active_triggers 
-                FROM physics_calculations 
-                WHERE id IN (SELECT MAX(id) FROM physics_calculations GROUP BY site_id)
-                  AND alert_level IN ('RED', 'ORANGE')
-            """)
-            for row in cur.fetchall():
-                if row[2] == 'RED':
-                    critical_sites.append({"site_id": row[0], "dynamic_fs": row[1], "triggers": row[3]})
-                elif row[2] == 'ORANGE':
-                    warning_sites.append({"site_id": row[0], "dynamic_fs": row[1], "triggers": row[3]})
-            conn.close()
-        except Exception as e:
-            logger.warning("Could not query perpetual_telemetry.db for disaster indicator: %s", e)
+    from app.core.database import get_time_series_store
+    store = get_time_series_store()
+    return store.get_active_disaster_indicator()
 
-    if critical_sites:
-        return {
-            "level": "CRITICAL_RED",
-            "badge_color": "rose",
-            "title": "CRITICAL EMERGENCY: ACTIVE SLOPE FAILURE / COLLAPSE DETECTED",
-            "message": f"Immediate civil evacuation required! {len(critical_sites)} monitored site(s) currently exhibiting critical failure conditions (Dynamic FS < 1.0) under active environmental triggers.",
-            "is_disaster_active": True,
-            "critical_count": len(critical_sites),
-            "warning_count": len(warning_sites),
-            "critical_sites": critical_sites,
-        }
-    elif warning_sites:
-        return {
-            "level": "ELEVATED_ORANGE",
-            "badge_color": "orange",
-            "title": "ELEVATED HAZARD WATCH: STEEP GULLY MONITORING ACTIVE",
-            "message": f"Zero active emergency collapses detected. {len(warning_sites)} steep high-gradient scree site(s) show marginal equilibrium (FS ~0.98–1.04) under baseline dry weather. No nationwide catastrophe.",
-            "is_disaster_active": False,
-            "critical_count": 0,
-            "warning_count": len(warning_sites),
-            "warning_sites": warning_sites,
-        }
-    else:
-        return {
-            "level": "NORMAL_GREEN",
-            "badge_color": "emerald",
-            "title": "NO ACTIVE LANDSLIDE OR AVALANCHE DISASTER DETECTED",
-            "message": "All ground-truth verification stations and monitored corridors across Nepal are in stable equilibrium. Zero active slope failures, glacial lake outbursts, or rock-ice avalanches detected under current conditions.",
-            "is_disaster_active": False,
-            "critical_count": 0,
-            "warning_count": 0,
-        }
+
+@router.get("/database/metadata")
+def get_database_status_metadata() -> Dict[str, object]:
+    """Return active database engine (PostGIS+TimescaleDB vs SQLite), hypertables, and DDL metadata."""
+    from app.core.database import get_database_metadata
+    return get_database_metadata()
 
 
 @router.get("/feedback/ground-truth")

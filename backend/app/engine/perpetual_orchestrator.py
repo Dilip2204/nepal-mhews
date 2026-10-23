@@ -36,6 +36,7 @@ from app.ingestion.ground_truth_feedback import (
 from app.physics.feature_synthesizer import RawEarthObservationInputs, synthesize_physics_variables
 from app.ml.susceptibility import synthesize_point_physics_from_terrain
 from app.ml.continuous_equation_optimizer import ContinuousEquationOptimizer
+from app.core.database import get_time_series_store, BaseTimeSeriesStore
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 DB_PATH = DATA_DIR / "perpetual_telemetry.db"
@@ -50,78 +51,11 @@ class PerpetualEngineOrchestrator:
         self.fast_loop_interval_sec = fast_loop_interval_sec  # 30 minutes default
         self.sites = load_sites_of_interest()
         self.optimizer = ContinuousEquationOptimizer()
-        self.db_conn = self._init_db()
+        self.store: BaseTimeSeriesStore = get_time_series_store()
         self.cycle_count = 0
         self.start_time = time.time()
         self.last_run_time = 0.0
         self.latest_status: Dict[str, Any] = {}
-
-    def _init_db(self) -> sqlite3.Connection:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
-        cur = conn.cursor()
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS sites (
-                site_id TEXT PRIMARY KEY,
-                name TEXT,
-                hazard_type TEXT,
-                latitude REAL,
-                longitude REAL,
-                elevation_m REAL,
-                slope_deg REAL,
-                profile_curvature REAL,
-                local_relief_m REAL,
-                fault_distance_km REAL,
-                basin_id TEXT
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS telemetry_snapshots (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp_utc REAL,
-                site_id TEXT,
-                rain_72h_mm REAL,
-                rain_peak_1h_mm REAL,
-                temp_2m_c REAL,
-                surface_pressure_hpa REAL,
-                cloud_cover_pct REAL,
-                wind_speed_kmh REAL,
-                wind_surcharge_kpa REAL,
-                seismic_pga_g REAL,
-                FOREIGN KEY (site_id) REFERENCES sites(site_id)
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS physics_calculations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp_utc REAL,
-                site_id TEXT,
-                soil_depth_z_m REAL,
-                c_prime_kpa REAL,
-                phi_prime_deg REAL,
-                static_fs REAL,
-                dynamic_fs REAL,
-                calibrated_fs REAL,
-                failure_prob_pct REAL,
-                alert_level TEXT,
-                active_triggers TEXT,
-                FOREIGN KEY (site_id) REFERENCES sites(site_id)
-            )
-        """)
-        conn.commit()
-
-        # Seed sites table if empty
-        cur.execute("SELECT COUNT(*) FROM sites")
-        if cur.fetchone()[0] == 0:
-            for s in self.sites:
-                cur.execute(
-                    """INSERT OR REPLACE INTO sites VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (s.site_id, s.name, s.hazard_type, s.latitude, s.longitude, s.elevation_m,
-                     s.slope_deg, s.profile_curvature, s.local_relief_m, s.fault_distance_km, s.basin_id),
-                )
-            conn.commit()
-
-        return conn
 
     def execute_single_calculation_cycle(self) -> Dict[str, Any]:
         """Run one complete data fetch, physics calculation, and ML equation optimization pass."""
@@ -130,6 +64,7 @@ class PerpetualEngineOrchestrator:
         print(f"\n=======================================================", flush=True)
         print(f"🔄 PERPETUAL ENGINE CYCLE #{self.cycle_count} STARTING", flush=True)
         print(f"   Target: {len(self.sites)} sites across Nepal | Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}", flush=True)
+        print(f"   Storage Engine: {self.store.get_engine_name()}", flush=True)
         print(f"=======================================================", flush=True)
 
         # 1. Batched Expanded Weather Ingestion (22 Live Input Points)
@@ -141,8 +76,6 @@ class PerpetualEngineOrchestrator:
         print(f"[2/4] Running 6-signal soil depth (z), PINN InSAR inversion, and 7-Factor slope stability...", flush=True)
         alert_counts = {"GREEN": 0, "YELLOW": 0, "ORANGE": 0, "RED": 0}
         site_evaluations = []
-
-        cur = self.db_conn.cursor()
         now_utc = time.time()
 
         for s in self.sites:
@@ -221,14 +154,30 @@ class PerpetualEngineOrchestrator:
             alert_counts[lvl] += 1
             fail_prob = float(1.0 / (1.0 + math.exp(6.8 * (dynamic_fs - 1.0)))) * 100.0
 
-            # Store in DB
-            cur.execute("""
-                INSERT INTO physics_calculations (
-                    timestamp_utc, site_id, soil_depth_z_m, c_prime_kpa, phi_prime_deg,
-                    static_fs, dynamic_fs, calibrated_fs, failure_prob_pct, alert_level, active_triggers
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (now_utc, s.site_id, syn["z_m"], syn["c_prime_kpa"], syn["phi_prime_deg"],
-                  static_fs, dynamic_fs, cal_fs, fail_prob, lvl, ",".join(triggers)))
+            # Store in unified Time-Series Store (TimescaleDB hypertable or SQLite fallback)
+            self.store.insert_physics_calculation(
+                timestamp_utc=now_utc,
+                site_id=s.site_id,
+                soil_depth_z_m=syn["z_m"],
+                c_prime_kpa=syn["c_prime_kpa"],
+                phi_prime_deg=syn["phi_prime_deg"],
+                static_fs=static_fs,
+                dynamic_fs=dynamic_fs,
+                calibrated_fs=cal_fs,
+                failure_prob_pct=fail_prob,
+                alert_level=lvl,
+                active_triggers=triggers,
+                lat=s.latitude,
+                lon=s.longitude,
+            )
+            if telem:
+                self.store.insert_telemetry_snapshot(
+                    timestamp_utc=now_utc,
+                    site_id=s.site_id,
+                    telemetry=asdict(telem) if hasattr(telem, "__dataclass_fields__") else vars(telem),
+                    lat=s.latitude,
+                    lon=s.longitude,
+                )
 
             site_evaluations.append({
                 "site_id": s.site_id,
@@ -242,7 +191,6 @@ class PerpetualEngineOrchestrator:
                 "triggers": triggers,
             })
 
-        self.db_conn.commit()
         print(f"      Alert Distribution: GREEN={alert_counts['GREEN']} | YELLOW={alert_counts['YELLOW']} | ORANGE={alert_counts['ORANGE']} | RED={alert_counts['RED']}", flush=True)
 
         # 3. Live Ground-Truth Event Feedback Loop (NDRRMA & Sentinel-2/SAR Scar Detection)

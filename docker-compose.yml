@@ -13,6 +13,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/home/postgres/pgdata/data
+      - ./backend/sql/init-timescaledb.sql:/docker-entrypoint-initdb.d/init-timescaledb.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mhews -d nepal_mhews"]
       interval: 10s
