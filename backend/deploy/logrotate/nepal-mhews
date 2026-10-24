@@ -1,0 +1,52 @@
+# Log rotation for Himalayan-MHEWS during the 6-month unattended run.
+#
+# Without this, backend/logs/perpetual_engine.log grows forever: the engine appends
+# ~1.3 KB per cycle, 48 cycles a day (96 under the monsoon throttle), for 180 days.
+# The weekly audit and the cron watchdogs add their own streams.
+#
+# copytruncate is mandatory here, not a preference. The orchestrator is launched by
+# start_perpetual_system.sh as `python -u ... >> perpetual_engine.log` - the shell holds
+# the file open for the lifetime of the process and nothing reopens it on SIGHUP. A
+# plain rename would leave the engine writing to an unlinked inode: the log would appear
+# frozen while the disk kept filling, and the only recovery would be restarting the live
+# early-warning engine. copytruncate copies the content away and truncates in place, so
+# the running process keeps its descriptor and its offset.
+#
+# The small window where copytruncate can lose lines written mid-copy is an acceptable
+# trade for never restarting the engine; the authoritative record is the SQLite store
+# and perpetual_status.json, not this log.
+#
+# --- Installing ---------------------------------------------------------------
+# As a user (no root, recommended here) - add to crontab via install_mhews_cron.sh,
+# or run manually:
+#
+#   /usr/sbin/logrotate -s /data-mqs/users/djena/avalanche_detector/nepal-mhews/backend/logs/.logrotate.state \
+#     /data-mqs/users/djena/avalanche_detector/nepal-mhews/backend/deploy/logrotate/nepal-mhews
+#
+# The -s state file is required: without it logrotate tries /var/lib/logrotate/ and
+# fails for a non-root user. Add --debug to see what it would do without doing it.
+#
+# System-wide (needs root): copy this file to /etc/logrotate.d/nepal-mhews and add an
+# `su djena users` line, otherwise logrotate refuses to rotate logs in a user-owned
+# directory that is group- or world-writable.
+# ------------------------------------------------------------------------------
+
+/data-mqs/users/djena/avalanche_detector/nepal-mhews/backend/logs/*.log {
+    weekly
+    rotate 12
+    compress
+    delaycompress
+    copytruncate
+    missingok
+    notifempty
+    nocreate
+    # Numeric suffixes (.1 .. .12), NOT dateext. logrotate refuses to rotate when the
+    # target filename already exists ("destination ... already exists, skipping
+    # rotation"), so any dated suffix silently defeats the maxsize guard below the
+    # second time it fires within one suffix period - exactly the crash-loop case
+    # maxsize exists for. Numeric rotation shifts the whole chain and cannot collide.
+    # Force a rotation mid-week if a crash loop floods the log. Without this a
+    # restart loop writing a traceback every 10s could fill the filesystem before
+    # the weekly rotation ever arrives.
+    maxsize 100M
+}

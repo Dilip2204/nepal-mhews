@@ -202,3 +202,34 @@ def classify_stability(fs: ArrayLike) -> Dict[str, object]:
         "stability_regime": regime,
         "critical_mask": critical_mask,
     }
+
+
+def compute_viscoplastic_creep_velocity(
+    slope_deg: float,
+    dynamic_fs: float,
+    elevation_m: float = 2000.0,
+    hazard_type: str = "rainfall_landslide",
+    rain_72h_mm: float = 0.0,
+    saturation_ratio: float = 0.2,
+) -> float:
+    """Physically grounded site-specific slope/glacier creep velocity (mm/month).
+
+    Derived from viscoplastic secondary creep power-law:
+        v_creep = v_ref * (1 / FS)^n * sin(beta) * K_cryo * K_hydro
+    Where:
+        - beta: slope angle
+        - FS: live dynamic factor of safety
+        - K_cryo: permafrost / hanging glacier creep multiplier (1.6x for >4500m or icefall)
+        - K_hydro: rainfall / groundwater pore pressure softening factor
+    """
+    import math
+    slope_rad = math.radians(max(float(slope_deg), 2.0))
+    slope_sin = math.sin(slope_rad)
+    safe_fs = max(float(dynamic_fs), 0.35)
+    creep_base = 10.5 * ((1.0 / safe_fs) ** 2.8)
+    is_cryo = (elevation_m >= 4500.0 or hazard_type in ("rock_ice_avalanche", "glof"))
+    cryo_boost = 1.6 if is_cryo else 1.0
+    sat_factor = 1.0 + 0.5 * min(float(saturation_ratio) + (rain_72h_mm / 150.0), 2.0)
+    creep = creep_base * slope_sin * cryo_boost * sat_factor
+    return round(float(np.clip(creep, 0.3, 48.0)), 1)
+

@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Dict, Any, Tuple, List
 import numpy as np
 import pandas as pd
-from sklearn.metrics import roc_auc_score, recall_score, accuracy_score, f1_score
 
 from app.ingestion.ground_truth_feedback import ensure_feedback_catalog_initialized
 
@@ -29,6 +28,10 @@ DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 PROCESSED_DIR = DATA_DIR / "processed"
 ACTIVE_PARAMS_PATH = DATA_DIR / "active_equation_parameters.json"
 OPTIMIZER_LOG_PATH = DATA_DIR / "equation_optimizer_log.json"
+
+# Minimum fitness gain required to replace the production champion. Matches the
+# Rule 8.4 gate used by the weekly audit (run_weekly_ai_audit.py).
+PROMOTION_EPSILON = 1e-4
 
 BASELINE_PARAMS: Dict[str, float] = {
     "c_res_base": 0.3433,
@@ -264,10 +267,22 @@ class ContinuousEquationOptimizer:
             for _ in range(n_pts):
                 deviations.append(rel_fs_shift)
 
-        acc = float(accuracy_score(y_true_np, pred_labels))
-        rec = float(recall_score(y_true_np, pred_labels))
-        auc = float(roc_auc_score(y_true_np, prob_preds_np))
-        f1 = float(f1_score(y_true_np, pred_labels))
+        tp = int(np.sum((y_true_np == 1) & (pred_labels == 1)))
+        fp = int(np.sum((y_true_np == 0) & (pred_labels == 1)))
+        fn = int(np.sum((y_true_np == 1) & (pred_labels == 0)))
+        acc = float(np.mean(y_true_np == pred_labels))
+        rec = float(tp / max(tp + fn, 1))
+        f1 = float((2.0 * tp) / max(2 * tp + fp + fn, 1))
+
+        pos = prob_preds_np[y_true_np == 1]
+        neg = prob_preds_np[y_true_np == 0]
+        if pos.size == 0 or neg.size == 0:
+            auc = 0.5
+        else:
+            comparisons = (pos[:, None] > neg[None, :]).astype(float) + 0.5 * (
+                pos[:, None] == neg[None, :]
+            )
+            auc = float(np.mean(comparisons))
         cryo_acc = (cryo_correct / cryo_total) if cryo_total > 0 else 1.0
         fb_acc = (fb_correct / fb_total) if fb_total > 0 else 1.0
         avg_dev = float(np.mean(deviations) * 100.0) if deviations else 1.50
@@ -341,11 +356,15 @@ class ContinuousEquationOptimizer:
         reason = "Fitness did not exceed active baseline"
         # Rule 8.4 Validation Gate
         if rec >= 0.9136 and cryo_acc >= 0.999 and avg_dev <= 5.0:
-            if best_fitness > active_fitness:
+            # Require a MEANINGFUL improvement. A bare `>` promotes on differences far
+            # below display precision (hence logs reading "0.9310 > 0.9310"), rewriting
+            # the production equation on numerical noise every cycle - 48x/day.
+            if best_fitness > active_fitness + PROMOTION_EPSILON:
                 promoted = True
                 reason = (
-                    f"Promoted! Beat fitness ({best_fitness:.4f} > {active_fitness:.4f}) "
-                    f"with 100% Cryo, {fb_acc*100:.1f}% Live-GT, {rec*100:.2f}% Recall, {avg_dev:.2f}% FS-Dev"
+                    f"Promoted! Beat fitness ({best_fitness:.6f} > {active_fitness:.6f} "
+                    f"+ {PROMOTION_EPSILON:g}) with 100% Cryo, {fb_acc*100:.1f}% Live-GT, "
+                    f"{rec*100:.2f}% Recall, {avg_dev:.2f}% FS-Dev"
                 )
                 self._save_active_params(best_candidate)
             else:

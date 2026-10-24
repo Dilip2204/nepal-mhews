@@ -1,0 +1,57 @@
+# Himalayan-MHEWS FastAPI server + Leaflet dashboard (systemd USER unit).
+#
+# Equivalent to backend/scripts/run_with_ollama.sh, minus the interactive Ollama
+# reachability probe: the API serves physics-only results when the Ollama tunnel
+# is down, so an unreachable tunnel must not block startup.
+#
+#   Install : bash backend/scripts/install_systemd_services.sh
+#   Logs    : journalctl --user -u nepal-mhews-api.service -f
+#   URL     : http://<host>:8000/   (override with PORT= in backend/.env)
+
+[Unit]
+Description=Himalayan-MHEWS FastAPI dashboard & API (uvicorn)
+Documentation=file:///data-mqs/users/djena/avalanche_detector/nepal-mhews/SIX_MONTH_RUN_CHECKLIST.md
+# Ordering only. Deliberately NO Wants=/Requires= on the orchestrator: starting
+# the API must never implicitly launch a second orchestrator while one is still
+# running in tmux. Both units are enabled, so boot ordering still applies.
+After=network-online.target nepal-mhews-perpetual.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/data-mqs/users/djena/avalanche_detector/nepal-mhews
+
+# Defaults that backend/.env may override (see the precedence note below).
+Environment=PORT=8000
+Environment=OLLAMA_URL=http://127.0.0.1:11434
+Environment=OLLAMA_MODEL=llama3.1:8b
+
+# Mirrors `set -a; . ./.env` in backend/scripts/run_with_ollama.sh.  Optional ('-').
+# NOTE: systemd gives EnvironmentFile= precedence over Environment= regardless of
+# the order of these lines (systemd.exec(5)). Never put OMP_NUM_THREADS or the
+# other thread caps into backend/.env - they would override the caps below.
+EnvironmentFile=-/data-mqs/users/djena/avalanche_detector/nepal-mhews/backend/.env
+
+# MANDATORY on this shared 256-core host (AGENTS.md 8.1). The API warm-up fits a
+# susceptibility model and a runoff autoencoder, so it is not a light process.
+Environment=OMP_NUM_THREADS=4
+Environment=OPENBLAS_NUM_THREADS=4
+Environment=MKL_NUM_THREADS=4
+Environment=NUMEXPR_NUM_THREADS=4
+Environment=PYTHONPATH=backend:/data-mqs/users/djena/avalanche_detector/nepal-mhews/backend
+
+ExecStart=/data-mqs/users/djena/avalanche_detector/nepal-mhews/backend/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT}
+
+Restart=always
+RestartSec=30
+# Startup warm-up (susceptibility fit + autoencoder) takes ~2-4 minutes; this is
+# Type=simple so systemd does not wait for it, but stop must stay patient.
+TimeoutStopSec=60
+KillMode=mixed
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mhews-api
+
+[Install]
+WantedBy=default.target

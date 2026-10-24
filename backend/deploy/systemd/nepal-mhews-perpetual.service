@@ -1,0 +1,62 @@
+# Himalayan-MHEWS perpetual ingestion & ML optimisation engine (systemd USER unit).
+#
+# Replaces the ad-hoc tmux session 'nepal-mhews-perpetual'. A tmux session does
+# not survive a host reboot or a maintenance window, which would silently end
+# the 6-month unattended telemetry run.
+#
+#   Install : bash backend/scripts/install_systemd_services.sh
+#   Logs    : journalctl --user -u nepal-mhews-perpetual.service -f
+#
+# WARNING: exactly ONE orchestrator may run at a time. Two instances double-write
+# backend/data/perpetual_telemetry.db and corrupt the time series. Kill the tmux
+# session before starting this unit (the installer refuses to start it otherwise).
+
+[Unit]
+Description=Himalayan-MHEWS perpetual orchestrator (491 Nepal sites, 30-min telemetry cycle)
+Documentation=file:///data-mqs/users/djena/avalanche_detector/nepal-mhews/SIX_MONTH_RUN_CHECKLIST.md
+# Best-effort ordering only (network-online.target is a system target and is
+# simply ignored by the user manager). The engine degrades gracefully offline
+# and retries on the next cycle, so a missing network at boot is not fatal.
+After=network-online.target
+# A 6-month unattended run must keep retrying no matter how often it crashed,
+# so start rate-limiting is disabled entirely.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/data-mqs/users/djena/avalanche_detector/nepal-mhews
+
+# Default that backend/.env may override (see the precedence note below).
+Environment=CYCLE_INTERVAL_SEC=1800
+
+# Mirrors `set -a; . ./.env` in backend/scripts/run_with_ollama.sh so the engine
+# sees API keys, alert settings and the adaptive monsoon throttle. Optional ('-').
+# NOTE: systemd gives EnvironmentFile= precedence over Environment= regardless of
+# the order of these lines (systemd.exec(5)). Never put OMP_NUM_THREADS or the
+# other thread caps into backend/.env - they would override the caps below.
+EnvironmentFile=-/data-mqs/users/djena/avalanche_detector/nepal-mhews/backend/.env
+
+# MANDATORY on this shared 256-core host (AGENTS.md 8.1): an uncapped run
+# previously spawned ~136 threads and degraded other engineers' jobs.
+Environment=OMP_NUM_THREADS=4
+Environment=OPENBLAS_NUM_THREADS=4
+Environment=MKL_NUM_THREADS=4
+Environment=NUMEXPR_NUM_THREADS=4
+# 'backend' matches the documented PYTHONPATH=backend invocation; the absolute
+# entry keeps `import app` working even if something changes the directory.
+Environment=PYTHONPATH=backend:/data-mqs/users/djena/avalanche_detector/nepal-mhews/backend
+
+ExecStart=/data-mqs/users/djena/avalanche_detector/nepal-mhews/backend/.venv/bin/python -u /data-mqs/users/djena/avalanche_detector/nepal-mhews/backend/app/engine/perpetual_orchestrator.py
+
+Restart=always
+RestartSec=30
+# A cycle sweeps 491 sites; give it room to finish its SQLite writes on stop.
+TimeoutStopSec=90
+KillMode=mixed
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mhews-perpetual
+
+[Install]
+WantedBy=default.target

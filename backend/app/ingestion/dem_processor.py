@@ -112,6 +112,16 @@ def process_dem_grid_derivatives(
     }
 
 
+def _can_reach_s3_host(host: str = "copernicus-dem-30m.s3.amazonaws.com") -> bool:
+    """Fast non-blocking DNS pre-flight check to prevent GDAL / vsicurl hanging when offline."""
+    import socket
+    try:
+        socket.gethostbyname(host)
+        return True
+    except Exception:
+        return False
+
+
 def fetch_and_process_copernicus_dem_patch(
     center_lat: float = 28.215,
     center_lon: float = 85.515,
@@ -122,7 +132,7 @@ def fetch_and_process_copernicus_dem_patch(
     dem_arr: Optional[np.ndarray] = None
     source_used = "SYNTHETIC_CANYON_FALLBACK"
 
-    if live_cog_read:
+    if live_cog_read and _can_reach_s3_host():
         try:
             import rasterio
             from rasterio.windows import Window

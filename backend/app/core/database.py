@@ -21,6 +21,51 @@ logger = logging.getLogger("nepal_mhews.database")
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 DEFAULT_SQLITE_PATH = DATA_DIR / "perpetual_telemetry.db"
 
+# Raw telemetry columns persisted on every cycle (shared by both engines).
+# Columns not measured live (e.g. api_rain_30d_mm, insar_creep_mm_month) stay NULL
+# rather than being filled with proxies, so downstream AI audits see real data only.
+TELEMETRY_COLUMNS: List[Tuple[str, str]] = [
+    ("rain_72h_mm", "REAL"),
+    ("rain_peak_1h_mm", "REAL"),
+    ("temp_2m_c", "REAL"),
+    ("surface_pressure_hpa", "REAL"),
+    ("pressure_deficit_hpa", "REAL"),
+    ("cloud_cover_pct", "REAL"),
+    ("wind_speed_kmh", "REAL"),
+    ("wind_gusts_kmh", "REAL"),
+    ("wind_surcharge_kpa", "REAL"),
+    ("pdd_days_7d", "REAL"),
+    ("api_rain_30d_mm", "REAL"),
+    ("ati_diurnal_lst", "REAL"),
+    ("smap_saturation_pct", "REAL"),
+    ("insar_creep_mm_month", "REAL"),
+    ("seismic_pga_g", "REAL"),
+    ("relative_humidity_pct", "REAL"),
+    ("seismic_mag", "REAL"),
+    ("cloudburst_flag", "INTEGER"),
+    ("cyclonic_depression_flag", "INTEGER"),
+]
+
+# Field-name aliases emitted by `LiveSiteTelemetry` -> canonical DB column names
+_TELEMETRY_ALIASES: Dict[str, str] = {
+    "wind_speed_10m_kmh": "wind_speed_kmh",
+    "pdd_days": "pdd_days_7d",
+    "dahal_hasegawa_cloudburst": "cloudburst_flag",
+}
+
+
+def normalize_telemetry_record(telemetry: Dict[str, Any]) -> Dict[str, Any]:
+    """Map a live telemetry dict onto canonical `TELEMETRY_COLUMNS` names."""
+    out: Dict[str, Any] = {}
+    for key, value in telemetry.items():
+        col = _TELEMETRY_ALIASES.get(key, key)
+        if col not in out or out[col] is None:
+            out[col] = value
+    for flag in ("cloudburst_flag", "cyclonic_depression_flag"):
+        if out.get(flag) is not None:
+            out[flag] = 1 if bool(out[flag]) else 0
+    return {col: out.get(col) for col, _ in TELEMETRY_COLUMNS}
+
 POSTGIS_TIMESCALEDB_DDL: List[str] = [
     "CREATE EXTENSION IF NOT EXISTS postgis;",
     "CREATE EXTENSION IF NOT EXISTS postgis_raster;",
@@ -65,6 +110,11 @@ POSTGIS_TIMESCALEDB_DDL: List[str] = [
         geom GEOMETRY(Point, 4326)
     );
     """,
+    # Columns added after the initial cutover (idempotent upgrades for existing clusters)
+    "ALTER TABLE telemetry_snapshots ADD COLUMN IF NOT EXISTS relative_humidity_pct DOUBLE PRECISION;",
+    "ALTER TABLE telemetry_snapshots ADD COLUMN IF NOT EXISTS seismic_mag DOUBLE PRECISION;",
+    "ALTER TABLE telemetry_snapshots ADD COLUMN IF NOT EXISTS cloudburst_flag BOOLEAN;",
+    "ALTER TABLE telemetry_snapshots ADD COLUMN IF NOT EXISTS cyclonic_depression_flag BOOLEAN;",
     "SELECT create_hypertable('telemetry_snapshots', 'ts', if_not_exists => TRUE, chunk_time_interval => INTERVAL '1 day');",
     "CREATE INDEX IF NOT EXISTS idx_telemetry_site_ts ON telemetry_snapshots (site_id, ts DESC);",
     "CREATE INDEX IF NOT EXISTS idx_telemetry_geom ON telemetry_snapshots USING GIST (geom);",
@@ -126,6 +176,59 @@ POSTGIS_TIMESCALEDB_DDL: List[str] = [
     );
     """,
     "CREATE INDEX IF NOT EXISTS idx_alerts_level_time ON hazard_alerts (alert_level, created_at DESC);",
+    """
+    CREATE TABLE IF NOT EXISTS unprocessed_bulletins (
+        bulletin_id VARCHAR(64) PRIMARY KEY,
+        received_utc DOUBLE PRECISION NOT NULL,
+        source VARCHAR(64) NOT NULL,
+        title TEXT NOT NULL,
+        raw_text TEXT NOT NULL,
+        url TEXT,
+        district_hint VARCHAR(64),
+        status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+        extracted_event_id VARCHAR(64),
+        parsed_json JSONB
+    );
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_bulletins_status ON unprocessed_bulletins (status, received_utc DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_bulletins_source ON unprocessed_bulletins (source);",
+    """
+    CREATE TABLE IF NOT EXISTS satellite_visual_candidates (
+        candidate_id VARCHAR(64) PRIMARY KEY,
+        detected_utc DOUBLE PRECISION NOT NULL,
+        site_id VARCHAR(64),
+        latitude DOUBLE PRECISION NOT NULL,
+        longitude DOUBLE PRECISION NOT NULL,
+        trigger_type VARCHAR(64) NOT NULL,
+        delta_ndvi DOUBLE PRECISION,
+        sar_velocity_mm_month DOUBLE PRECISION,
+        thumbnail_before_path TEXT,
+        thumbnail_after_path TEXT,
+        status VARCHAR(32) NOT NULL DEFAULT 'PENDING_AI_INSPECTION',
+        ai_confidence DOUBLE PRECISION,
+        ai_notes TEXT,
+        geom GEOMETRY(Point, 4326)
+    );
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_visual_status ON satellite_visual_candidates (status, detected_utc DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_visual_geom ON satellite_visual_candidates USING GIST (geom);",
+    """
+    CREATE TABLE IF NOT EXISTS ai_audit_runs (
+        run_id VARCHAR(64) PRIMARY KEY,
+        audit_timestamp_utc DOUBLE PRECISION NOT NULL,
+        engine_used VARCHAR(64) NOT NULL,
+        bulletins_scanned INTEGER NOT NULL DEFAULT 0,
+        events_extracted INTEGER NOT NULL DEFAULT 0,
+        visual_candidates_inspected INTEGER NOT NULL DEFAULT 0,
+        visual_confirmed INTEGER NOT NULL DEFAULT 0,
+        equations_evaluated INTEGER NOT NULL DEFAULT 0,
+        promoted_to_production BOOLEAN NOT NULL DEFAULT FALSE,
+        promoted_parameters JSONB,
+        summary_report TEXT,
+        token_usage_json JSONB
+    );
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_audit_time ON ai_audit_runs (audit_timestamp_utc DESC);",
 ]
 
 
@@ -170,6 +273,46 @@ class BaseTimeSeriesStore:
         raise NotImplementedError
 
     def get_active_disaster_indicator(self) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    # --- Staging & Weekly AI Audit Queues ---
+    def insert_unprocessed_bulletin(self, bulletin: Dict[str, Any]) -> str:
+        raise NotImplementedError
+
+    def get_pending_bulletins(self, limit: int = 50) -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
+    def update_bulletin_status(
+        self,
+        bulletin_id: str,
+        status: str,
+        extracted_event_id: Optional[str] = None,
+        parsed_json: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        raise NotImplementedError
+
+    def insert_visual_candidate(self, candidate: Dict[str, Any]) -> str:
+        raise NotImplementedError
+
+    def get_pending_visual_candidates(self, limit: int = 20) -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
+    def update_visual_candidate_status(
+        self,
+        candidate_id: str,
+        status: str,
+        ai_confidence: float,
+        ai_notes: str,
+    ) -> None:
+        raise NotImplementedError
+
+    def insert_ai_audit_run(self, run: Dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    def get_latest_ai_audit_runs(self, limit: int = 5) -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
+    def get_telemetry_outliers_for_audit(self, window_hours: int = 168) -> Dict[str, Any]:
         raise NotImplementedError
 
 
@@ -415,6 +558,297 @@ class TimescalePostGISStore(BaseTimeSeriesStore):
         finally:
             self.pool.putconn(conn)
 
+    # --- Staging & Weekly AI Audit Implementations (PostGIS / TimescaleDB) ---
+    def insert_unprocessed_bulletin(self, bulletin: Dict[str, Any]) -> str:
+        conn = self.pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                bid = bulletin.get("bulletin_id") or f"bul_{int(time.time())}_{abs(hash(bulletin.get('title', '')))%10000:04d}"
+                cur.execute(
+                    """
+                    INSERT INTO unprocessed_bulletins (
+                        bulletin_id, received_utc, source, title, raw_text, url, district_hint, status, extracted_event_id, parsed_json
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (bulletin_id) DO NOTHING;
+                    """,
+                    (
+                        bid,
+                        bulletin.get("received_utc", time.time()),
+                        bulletin.get("source", "UNKNOWN"),
+                        bulletin.get("title", ""),
+                        bulletin.get("raw_text", ""),
+                        bulletin.get("url"),
+                        bulletin.get("district_hint"),
+                        bulletin.get("status", "PENDING"),
+                        bulletin.get("extracted_event_id"),
+                        json.dumps(bulletin.get("parsed_json")) if bulletin.get("parsed_json") else None,
+                    ),
+                )
+            conn.commit()
+            return bid
+        finally:
+            self.pool.putconn(conn)
+
+    def get_pending_bulletins(self, limit: int = 50) -> List[Dict[str, Any]]:
+        conn = self.pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT bulletin_id, received_utc, source, title, raw_text, url, district_hint, status, extracted_event_id
+                    FROM unprocessed_bulletins
+                    WHERE status = 'PENDING'
+                    ORDER BY received_utc DESC
+                    LIMIT %s;
+                    """,
+                    (limit,),
+                )
+                rows = cur.fetchall()
+                return [
+                    {
+                        "bulletin_id": r[0],
+                        "received_utc": r[1],
+                        "source": r[2],
+                        "title": r[3],
+                        "raw_text": r[4],
+                        "url": r[5],
+                        "district_hint": r[6],
+                        "status": r[7],
+                        "extracted_event_id": r[8],
+                    }
+                    for r in rows
+                ]
+        finally:
+            self.pool.putconn(conn)
+
+    def update_bulletin_status(
+        self,
+        bulletin_id: str,
+        status: str,
+        extracted_event_id: Optional[str] = None,
+        parsed_json: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        conn = self.pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE unprocessed_bulletins
+                    SET status = %s,
+                        extracted_event_id = COALESCE(%s, extracted_event_id),
+                        parsed_json = COALESCE(%s::jsonb, parsed_json)
+                    WHERE bulletin_id = %s;
+                    """,
+                    (
+                        status,
+                        extracted_event_id,
+                        json.dumps(parsed_json) if parsed_json else None,
+                        bulletin_id,
+                    ),
+                )
+            conn.commit()
+        finally:
+            self.pool.putconn(conn)
+
+    def insert_visual_candidate(self, candidate: Dict[str, Any]) -> str:
+        conn = self.pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                cid = candidate.get("candidate_id") or f"vis_{int(time.time())}_{abs(hash(candidate.get('site_id', '')))%10000:04d}"
+                lat = candidate["latitude"]
+                lon = candidate["longitude"]
+                cur.execute(
+                    """
+                    INSERT INTO satellite_visual_candidates (
+                        candidate_id, detected_utc, site_id, latitude, longitude,
+                        trigger_type, delta_ndvi, sar_velocity_mm_month,
+                        thumbnail_before_path, thumbnail_after_path, status,
+                        ai_confidence, ai_notes, geom
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        ST_SetSRID(ST_MakePoint(%s, %s), 4326)
+                    )
+                    ON CONFLICT (candidate_id) DO NOTHING;
+                    """,
+                    (
+                        cid,
+                        candidate.get("detected_utc", time.time()),
+                        candidate.get("site_id"),
+                        lat,
+                        lon,
+                        candidate.get("trigger_type", "OPTICAL_DELTA_NDVI"),
+                        candidate.get("delta_ndvi"),
+                        candidate.get("sar_velocity_mm_month"),
+                        candidate.get("thumbnail_before_path"),
+                        candidate.get("thumbnail_after_path"),
+                        candidate.get("status", "PENDING_AI_INSPECTION"),
+                        candidate.get("ai_confidence"),
+                        candidate.get("ai_notes"),
+                        lon,
+                        lat,
+                    ),
+                )
+            conn.commit()
+            return cid
+        finally:
+            self.pool.putconn(conn)
+
+    def get_pending_visual_candidates(self, limit: int = 20) -> List[Dict[str, Any]]:
+        conn = self.pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT candidate_id, detected_utc, site_id, latitude, longitude,
+                           trigger_type, delta_ndvi, sar_velocity_mm_month,
+                           thumbnail_before_path, thumbnail_after_path, status
+                    FROM satellite_visual_candidates
+                    WHERE status = 'PENDING_AI_INSPECTION'
+                    ORDER BY detected_utc DESC
+                    LIMIT %s;
+                    """,
+                    (limit,),
+                )
+                rows = cur.fetchall()
+                return [
+                    {
+                        "candidate_id": r[0],
+                        "detected_utc": r[1],
+                        "site_id": r[2],
+                        "latitude": r[3],
+                        "longitude": r[4],
+                        "trigger_type": r[5],
+                        "delta_ndvi": r[6],
+                        "sar_velocity_mm_month": r[7],
+                        "thumbnail_before_path": r[8],
+                        "thumbnail_after_path": r[9],
+                        "status": r[10],
+                    }
+                    for r in rows
+                ]
+        finally:
+            self.pool.putconn(conn)
+
+    def update_visual_candidate_status(
+        self,
+        candidate_id: str,
+        status: str,
+        ai_confidence: float,
+        ai_notes: str,
+    ) -> None:
+        conn = self.pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE satellite_visual_candidates
+                    SET status = %s, ai_confidence = %s, ai_notes = %s
+                    WHERE candidate_id = %s;
+                    """,
+                    (status, ai_confidence, ai_notes, candidate_id),
+                )
+            conn.commit()
+        finally:
+            self.pool.putconn(conn)
+
+    def insert_ai_audit_run(self, run: Dict[str, Any]) -> None:
+        conn = self.pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                rid = run.get("run_id") or f"audit_{int(time.time())}"
+                cur.execute(
+                    """
+                    INSERT INTO ai_audit_runs (
+                        run_id, audit_timestamp_utc, engine_used, bulletins_scanned,
+                        events_extracted, visual_candidates_inspected, visual_confirmed,
+                        equations_evaluated, promoted_to_production, promoted_parameters,
+                        summary_report, token_usage_json
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (run_id) DO UPDATE SET
+                        summary_report = EXCLUDED.summary_report,
+                        promoted_to_production = EXCLUDED.promoted_to_production;
+                    """,
+                    (
+                        rid,
+                        run.get("audit_timestamp_utc", time.time()),
+                        run.get("engine_used", "UNKNOWN"),
+                        run.get("bulletins_scanned", 0),
+                        run.get("events_extracted", 0),
+                        run.get("visual_candidates_inspected", 0),
+                        run.get("visual_confirmed", 0),
+                        run.get("equations_evaluated", 0),
+                        bool(run.get("promoted_to_production", False)),
+                        json.dumps(run.get("promoted_parameters")) if run.get("promoted_parameters") else None,
+                        run.get("summary_report", ""),
+                        json.dumps(run.get("token_usage_json")) if run.get("token_usage_json") else None,
+                    ),
+                )
+            conn.commit()
+        finally:
+            self.pool.putconn(conn)
+
+    def get_latest_ai_audit_runs(self, limit: int = 5) -> List[Dict[str, Any]]:
+        conn = self.pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT run_id, audit_timestamp_utc, engine_used, bulletins_scanned,
+                           events_extracted, visual_candidates_inspected, visual_confirmed,
+                           equations_evaluated, promoted_to_production, promoted_parameters,
+                           summary_report, token_usage_json
+                    FROM ai_audit_runs
+                    ORDER BY audit_timestamp_utc DESC
+                    LIMIT %s;
+                    """,
+                    (limit,),
+                )
+                rows = cur.fetchall()
+                out = []
+                for r in rows:
+                    out.append({
+                        "run_id": r[0],
+                        "audit_timestamp_utc": r[1],
+                        "engine_used": r[2],
+                        "bulletins_scanned": r[3],
+                        "events_extracted": r[4],
+                        "visual_candidates_inspected": r[5],
+                        "visual_confirmed": r[6],
+                        "equations_evaluated": r[7],
+                        "promoted_to_production": bool(r[8]),
+                        "promoted_parameters": r[9],
+                        "summary_report": r[10],
+                        "token_usage": r[11],
+                    })
+                return out
+        finally:
+            self.pool.putconn(conn)
+
+    def get_telemetry_outliers_for_audit(self, window_hours: int = 168) -> Dict[str, Any]:
+        conn = self.pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT site_id, MAX(rain_72h_mm) as max_rain, MAX(rain_peak_1h_mm) as max_burst,
+                           MAX(wind_speed_kmh) as max_wind, MAX(seismic_pga_g) as max_pga
+                    FROM telemetry_snapshots
+                    WHERE ts >= NOW() - INTERVAL '%s hours'
+                    GROUP BY site_id
+                    HAVING MAX(rain_72h_mm) >= 80.0 OR MAX(rain_peak_1h_mm) >= 20.0 OR MAX(seismic_pga_g) >= 0.10
+                    ORDER BY max_rain DESC
+                    LIMIT 25;
+                    """,
+                    (window_hours,),
+                )
+                outliers = [
+                    {"site_id": r[0], "max_rain_72h": r[1], "max_burst_1h": r[2], "max_wind": r[3], "max_pga": r[4]}
+                    for r in cur.fetchall()
+                ]
+                return {"extreme_telemetry_sites": outliers, "total_outliers": len(outliers)}
+        finally:
+            self.pool.putconn(conn)
+
 
 class SQLiteTimeSeriesStore(BaseTimeSeriesStore):
     """Local SQLite fallback store for development workstations without Docker."""
@@ -472,6 +906,16 @@ class SQLiteTimeSeriesStore(BaseTimeSeriesStore):
                     FOREIGN KEY (site_id) REFERENCES sites(site_id)
                 );
             """)
+            # Idempotently migrate columns if table existed prior to expansion
+            cur.execute("PRAGMA table_info(telemetry_snapshots)")
+            existing_cols = {r[1] for r in cur.fetchall()}
+            for col, col_type in TELEMETRY_COLUMNS:
+                if col not in existing_cols:
+                    try:
+                        cur.execute(f"ALTER TABLE telemetry_snapshots ADD COLUMN {col} {col_type};")
+                    except Exception as e:
+                        logger.debug("SQLite column migration (%s): %s", col, e)
+
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS physics_calculations (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -491,6 +935,61 @@ class SQLiteTimeSeriesStore(BaseTimeSeriesStore):
             """)
             cur.execute("CREATE INDEX IF NOT EXISTS idx_calc_site ON physics_calculations(site_id, id DESC);")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_calc_alert ON physics_calculations(alert_level);")
+
+            # Staging & AI Audit Queues
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS unprocessed_bulletins (
+                    bulletin_id TEXT PRIMARY KEY,
+                    received_utc REAL NOT NULL,
+                    source TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    raw_text TEXT NOT NULL,
+                    url TEXT,
+                    district_hint TEXT,
+                    status TEXT NOT NULL DEFAULT 'PENDING',
+                    extracted_event_id TEXT,
+                    parsed_json TEXT
+                );
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_sqlite_bul_status ON unprocessed_bulletins (status, received_utc DESC);")
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS satellite_visual_candidates (
+                    candidate_id TEXT PRIMARY KEY,
+                    detected_utc REAL NOT NULL,
+                    site_id TEXT,
+                    latitude REAL NOT NULL,
+                    longitude REAL NOT NULL,
+                    trigger_type TEXT NOT NULL,
+                    delta_ndvi REAL,
+                    sar_velocity_mm_month REAL,
+                    thumbnail_before_path TEXT,
+                    thumbnail_after_path TEXT,
+                    status TEXT NOT NULL DEFAULT 'PENDING_AI_INSPECTION',
+                    ai_confidence REAL,
+                    ai_notes TEXT
+                );
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_sqlite_vis_status ON satellite_visual_candidates (status, detected_utc DESC);")
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS ai_audit_runs (
+                    run_id TEXT PRIMARY KEY,
+                    audit_timestamp_utc REAL NOT NULL,
+                    engine_used TEXT NOT NULL,
+                    bulletins_scanned INTEGER NOT NULL DEFAULT 0,
+                    events_extracted INTEGER NOT NULL DEFAULT 0,
+                    visual_candidates_inspected INTEGER NOT NULL DEFAULT 0,
+                    visual_confirmed INTEGER NOT NULL DEFAULT 0,
+                    equations_evaluated INTEGER NOT NULL DEFAULT 0,
+                    promoted_to_production INTEGER NOT NULL DEFAULT 0,
+                    promoted_parameters TEXT,
+                    summary_report TEXT,
+                    token_usage_json TEXT
+                );
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_sqlite_audit_time ON ai_audit_runs (audit_timestamp_utc DESC);")
+
             conn.commit()
         finally:
             conn.close()
@@ -547,40 +1046,297 @@ class SQLiteTimeSeriesStore(BaseTimeSeriesStore):
         lat: Optional[float] = None,
         lon: Optional[float] = None,
     ) -> None:
+        rec = normalize_telemetry_record(telemetry)
+        conn = self._get_connection()
+        try:
+            cur = conn.cursor()
+            cols = ["timestamp_utc", "site_id"] + [c for c, _ in TELEMETRY_COLUMNS]
+            placeholders = ["?"] * len(cols)
+            vals = [timestamp_utc, site_id] + [rec.get(c) for c, _ in TELEMETRY_COLUMNS]
+            cur.execute(
+                f"INSERT INTO telemetry_snapshots ({', '.join(cols)}) VALUES ({', '.join(placeholders)})",
+                vals,
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def insert_unprocessed_bulletin(self, bulletin: Dict[str, Any]) -> str:
+        bid = bulletin.get("bulletin_id") or f"bul_{int(time.time())}_{abs(hash(bulletin.get('title', '')))%10000:04d}"
         conn = self._get_connection()
         try:
             cur = conn.cursor()
             cur.execute(
                 """
-                INSERT INTO telemetry_snapshots (
-                    timestamp_utc, site_id, rain_72h_mm, rain_peak_1h_mm, temp_2m_c,
-                    surface_pressure_hpa, pressure_deficit_hpa, cloud_cover_pct,
-                    wind_speed_kmh, wind_gusts_kmh, wind_surcharge_kpa,
-                    pdd_days_7d, api_rain_30d_mm, ati_diurnal_lst,
-                    smap_saturation_pct, insar_creep_mm_month, seismic_pga_g
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
+                INSERT OR IGNORE INTO unprocessed_bulletins (
+                    bulletin_id, received_utc, source, title, raw_text, url, district_hint, status, extracted_event_id, parsed_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
                 (
-                    timestamp_utc,
-                    site_id,
-                    telemetry.get("rain_72h_mm"),
-                    telemetry.get("rain_peak_1h_mm"),
-                    telemetry.get("temp_2m_c"),
-                    telemetry.get("surface_pressure_hpa"),
-                    telemetry.get("pressure_deficit_hpa"),
-                    telemetry.get("cloud_cover_pct"),
-                    telemetry.get("wind_speed_kmh"),
-                    telemetry.get("wind_gusts_kmh"),
-                    telemetry.get("wind_surcharge_kpa"),
-                    telemetry.get("pdd_days_7d"),
-                    telemetry.get("api_rain_30d_mm"),
-                    telemetry.get("ati_diurnal_lst"),
-                    telemetry.get("smap_saturation_pct"),
-                    telemetry.get("insar_creep_mm_month"),
-                    telemetry.get("seismic_pga_g"),
+                    bid,
+                    bulletin.get("received_utc", time.time()),
+                    bulletin.get("source", "UNKNOWN"),
+                    bulletin.get("title", ""),
+                    bulletin.get("raw_text", ""),
+                    bulletin.get("url"),
+                    bulletin.get("district_hint"),
+                    bulletin.get("status", "PENDING"),
+                    bulletin.get("extracted_event_id"),
+                    json.dumps(bulletin.get("parsed_json")) if bulletin.get("parsed_json") else None,
                 ),
             )
             conn.commit()
+            return bid
+        finally:
+            conn.close()
+
+    def get_pending_bulletins(self, limit: int = 50) -> List[Dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT bulletin_id, received_utc, source, title, raw_text, url, district_hint, status, extracted_event_id
+                FROM unprocessed_bulletins
+                WHERE status = 'PENDING'
+                ORDER BY received_utc DESC
+                LIMIT ?;
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+            return [
+                {
+                    "bulletin_id": r[0],
+                    "received_utc": r[1],
+                    "source": r[2],
+                    "title": r[3],
+                    "raw_text": r[4],
+                    "url": r[5],
+                    "district_hint": r[6],
+                    "status": r[7],
+                    "extracted_event_id": r[8],
+                }
+                for r in rows
+            ]
+        finally:
+            conn.close()
+
+    def update_bulletin_status(
+        self,
+        bulletin_id: str,
+        status: str,
+        extracted_event_id: Optional[str] = None,
+        parsed_json: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        conn = self._get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE unprocessed_bulletins
+                SET status = ?,
+                    extracted_event_id = COALESCE(?, extracted_event_id),
+                    parsed_json = COALESCE(?, parsed_json)
+                WHERE bulletin_id = ?;
+                """,
+                (
+                    status,
+                    extracted_event_id,
+                    json.dumps(parsed_json) if parsed_json else None,
+                    bulletin_id,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def insert_visual_candidate(self, candidate: Dict[str, Any]) -> str:
+        cid = candidate.get("candidate_id") or f"vis_{int(time.time())}_{abs(hash(candidate.get('site_id', '')))%10000:04d}"
+        conn = self._get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT OR IGNORE INTO satellite_visual_candidates (
+                    candidate_id, detected_utc, site_id, latitude, longitude,
+                    trigger_type, delta_ndvi, sar_velocity_mm_month,
+                    thumbnail_before_path, thumbnail_after_path, status,
+                    ai_confidence, ai_notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    cid,
+                    candidate.get("detected_utc", time.time()),
+                    candidate.get("site_id"),
+                    candidate["latitude"],
+                    candidate["longitude"],
+                    candidate.get("trigger_type", "OPTICAL_DELTA_NDVI"),
+                    candidate.get("delta_ndvi"),
+                    candidate.get("sar_velocity_mm_month"),
+                    candidate.get("thumbnail_before_path"),
+                    candidate.get("thumbnail_after_path"),
+                    candidate.get("status", "PENDING_AI_INSPECTION"),
+                    candidate.get("ai_confidence"),
+                    candidate.get("ai_notes"),
+                ),
+            )
+            conn.commit()
+            return cid
+        finally:
+            conn.close()
+
+    def get_pending_visual_candidates(self, limit: int = 20) -> List[Dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT candidate_id, detected_utc, site_id, latitude, longitude,
+                       trigger_type, delta_ndvi, sar_velocity_mm_month,
+                       thumbnail_before_path, thumbnail_after_path, status
+                FROM satellite_visual_candidates
+                WHERE status = 'PENDING_AI_INSPECTION'
+                ORDER BY detected_utc DESC
+                LIMIT ?;
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+            return [
+                {
+                    "candidate_id": r[0],
+                    "detected_utc": r[1],
+                    "site_id": r[2],
+                    "latitude": r[3],
+                    "longitude": r[4],
+                    "trigger_type": r[5],
+                    "delta_ndvi": r[6],
+                    "sar_velocity_mm_month": r[7],
+                    "thumbnail_before_path": r[8],
+                    "thumbnail_after_path": r[9],
+                    "status": r[10],
+                }
+                for r in rows
+            ]
+        finally:
+            conn.close()
+
+    def update_visual_candidate_status(
+        self,
+        candidate_id: str,
+        status: str,
+        ai_confidence: float,
+        ai_notes: str,
+    ) -> None:
+        conn = self._get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE satellite_visual_candidates
+                SET status = ?, ai_confidence = ?, ai_notes = ?
+                WHERE candidate_id = ?;
+                """,
+                (status, ai_confidence, ai_notes, candidate_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def insert_ai_audit_run(self, run: Dict[str, Any]) -> None:
+        rid = run.get("run_id") or f"audit_{int(time.time())}"
+        conn = self._get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT OR REPLACE INTO ai_audit_runs (
+                    run_id, audit_timestamp_utc, engine_used, bulletins_scanned,
+                    events_extracted, visual_candidates_inspected, visual_confirmed,
+                    equations_evaluated, promoted_to_production, promoted_parameters,
+                    summary_report, token_usage_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    rid,
+                    run.get("audit_timestamp_utc", time.time()),
+                    run.get("engine_used", "UNKNOWN"),
+                    run.get("bulletins_scanned", 0),
+                    run.get("events_extracted", 0),
+                    run.get("visual_candidates_inspected", 0),
+                    run.get("visual_confirmed", 0),
+                    run.get("equations_evaluated", 0),
+                    1 if run.get("promoted_to_production") else 0,
+                    json.dumps(run.get("promoted_parameters")) if run.get("promoted_parameters") else None,
+                    run.get("summary_report", ""),
+                    json.dumps(run.get("token_usage_json")) if run.get("token_usage_json") else None,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_latest_ai_audit_runs(self, limit: int = 5) -> List[Dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT run_id, audit_timestamp_utc, engine_used, bulletins_scanned,
+                       events_extracted, visual_candidates_inspected, visual_confirmed,
+                       equations_evaluated, promoted_to_production, promoted_parameters,
+                       summary_report, token_usage_json
+                FROM ai_audit_runs
+                ORDER BY audit_timestamp_utc DESC
+                LIMIT ?;
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+            out = []
+            for r in rows:
+                out.append({
+                    "run_id": r[0],
+                    "audit_timestamp_utc": r[1],
+                    "engine_used": r[2],
+                    "bulletins_scanned": r[3],
+                    "events_extracted": r[4],
+                    "visual_candidates_inspected": r[5],
+                    "visual_confirmed": r[6],
+                    "equations_evaluated": r[7],
+                    "promoted_to_production": bool(r[8]),
+                    "promoted_parameters": json.loads(r[9]) if r[9] else None,
+                    "summary_report": r[10],
+                    "token_usage": json.loads(r[11]) if r[11] else None,
+                })
+            return out
+        finally:
+            conn.close()
+
+    def get_telemetry_outliers_for_audit(self, window_hours: int = 168) -> Dict[str, Any]:
+        conn = self._get_connection()
+        try:
+            cur = conn.cursor()
+            cutoff = time.time() - (window_hours * 3600.0)
+            cur.execute(
+                """
+                SELECT site_id, MAX(rain_72h_mm) as max_rain, MAX(rain_peak_1h_mm) as max_burst,
+                       MAX(wind_speed_kmh) as max_wind, MAX(seismic_pga_g) as max_pga
+                FROM telemetry_snapshots
+                WHERE timestamp_utc >= ?
+                GROUP BY site_id
+                HAVING MAX(rain_72h_mm) >= 80.0 OR MAX(rain_peak_1h_mm) >= 20.0 OR MAX(seismic_pga_g) >= 0.10
+                ORDER BY max_rain DESC
+                LIMIT 25;
+                """,
+                (cutoff,),
+            )
+            outliers = [
+                {"site_id": r[0], "max_rain_72h": r[1], "max_burst_1h": r[2], "max_wind": r[3], "max_pga": r[4]}
+                for r in cur.fetchall()
+            ]
+            return {"extreme_telemetry_sites": outliers, "total_outliers": len(outliers)}
         finally:
             conn.close()
 
@@ -731,6 +1487,13 @@ def get_database_metadata() -> Dict[str, object]:
         "database_url_configured": bool(settings.database_url),
         "postgis_extensions": ["postgis", "postgis_raster", "timescaledb"],
         "hypertables": ["telemetry_snapshots", "physics_calculations"],
-        "spatial_tables": ["sites", "ground_truth_events", "hazard_alerts"],
+        "spatial_tables": [
+            "sites",
+            "ground_truth_events",
+            "hazard_alerts",
+            "unprocessed_bulletins",
+            "satellite_visual_candidates",
+            "ai_audit_runs",
+        ],
         "ddl_statements": POSTGIS_TIMESCALEDB_DDL,
     }

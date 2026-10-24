@@ -110,3 +110,13 @@ class SatelliteSynthesisResponse(BaseModel):
     differential_calibration: Dict[str, object]
     failure_probability_pct: float
     stability_regime: str
+
+
+class WeeklyAuditTriggerRequest(BaseModel):
+    """Payload to trigger an on-demand AI geohazard audit."""
+
+    engine: str = Field("deterministic", description="AI engine: deterministic, gemini, claude, ollama, or auto")
+    limit_bulletins: int = Field(25, ge=1, le=100, description="Maximum bulletins to process")
+    limit_visual: int = Field(10, ge=1, le=50, description="Maximum thumbnail pairs to screen")
+    dry_run: bool = Field(False, description="Simulate without mutating databases")
+

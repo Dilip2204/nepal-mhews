@@ -19,3 +19,5 @@ geoalchemy2>=0.14.3
 psycopg2-binary>=2.9.9
 httpx>=0.26.0
 pytest>=8.0.0
+anthropic>=0.49.0
+pillow>=10.2.0

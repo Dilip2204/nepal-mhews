@@ -1,9 +1,10 @@
 """FastAPI routes for basins, Infinite Slope physics, ML susceptibility, and cascade alerts."""
 
-from typing import Dict, List
+from pathlib import Path
+from typing import Dict, List, Optional
 import math
 import numpy as np
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.api.schemas import (
     CascadeAlertResponse,
@@ -12,6 +13,7 @@ from app.api.schemas import (
     InfiniteSlopeResponse,
     SatelliteSynthesisRequest,
     SatelliteSynthesisResponse,
+    WeeklyAuditTriggerRequest,
 )
 from app.core.config import PILOT_BASINS, settings
 from app.core.database import get_database_metadata
@@ -45,6 +47,7 @@ from app.physics.infinite_slope import (
     classify_stability,
     compute_infinite_slope_fs,
     compute_probabilistic_fs,
+    compute_viscoplastic_creep_velocity,
 )
 from app.physics.runout_routing import (
     compute_settlement_impact_and_arrival_times,
@@ -529,7 +532,7 @@ def get_perpetual_engine_status() -> Dict[str, object]:
 
 @router.get("/sites")
 def list_sites_of_interest() -> List[Dict[str, object]]:
-    """Return catalog of all 491+ monitored sites across Nepal with latest physics calculations."""
+    """Return catalog of all 491+ monitored sites across Nepal with latest physics calculations and dynamic creep."""
     from app.engine.sites_catalog import load_sites_of_interest
     from app.core.database import get_time_series_store
 
@@ -548,6 +551,15 @@ def list_sites_of_interest() -> List[Dict[str, object]]:
             "active_triggers": [],
             "last_refresh_utc": 0.0,
         })
+        dyn_fs = float(c.get("dynamic_fs") or c.get("calibrated_fs") or 1.25)
+        creep = compute_viscoplastic_creep_velocity(
+            slope_deg=s.slope_deg,
+            dynamic_fs=dyn_fs,
+            elevation_m=s.elevation_m,
+            hazard_type=s.hazard_type,
+            rain_72h_mm=0.0,
+        )
+        c["ground_creep_mm_month"] = creep
         results.append({
             "site_id": s.site_id,
             "name": s.name,
@@ -561,31 +573,7 @@ def list_sites_of_interest() -> List[Dict[str, object]]:
             "fault_distance_km": s.fault_distance_km,
             "basin_id": s.basin_id,
             "physics": c,
-        })
-    return results
-    for s in sites:
-        c = calc_map.get(s.site_id, {
-            "static_fs": 1.25,
-            "dynamic_fs": 1.28,
-            "calibrated_fs": 1.25,
-            "failure_prob_pct": 14.5,
-            "alert_level": "GREEN",
-            "active_triggers": [],
-            "last_refresh_utc": 0.0,
-        })
-        results.append({
-            "site_id": s.site_id,
-            "name": s.name,
-            "hazard_type": s.hazard_type,
-            "latitude": s.latitude,
-            "longitude": s.longitude,
-            "elevation_m": s.elevation_m,
-            "slope_deg": s.slope_deg,
-            "profile_curvature": s.profile_curvature,
-            "local_relief_m": s.local_relief_m,
-            "fault_distance_km": s.fault_distance_km,
-            "basin_id": s.basin_id,
-            "physics": c,
+            "ground_creep_mm_month": creep,
         })
     return results
 
@@ -664,6 +652,20 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
     if wind_surcharge >= 0.40:
         triggers.append("WIND_BLOWN_CORNICE_SURCHARGE")
 
+    # Physically grounded site-specific InSAR LOS creep velocity (mm/month)
+    # Driven by viscoplastic shear strain from live factor of safety, slope gradient, and moisture saturation
+    dynamic_creep_mm_month = compute_viscoplastic_creep_velocity(
+        slope_deg=target_site.slope_deg,
+        dynamic_fs=dyn_fs,
+        elevation_m=target_site.elevation_m,
+        hazard_type=target_site.hazard_type,
+        rain_72h_mm=rain_72h,
+        saturation_ratio=float(syn.get("saturation_ratio", 0.2)),
+    )
+
+    if dynamic_creep_mm_month >= 10.0:
+        triggers.append("SAR_SLOPE_CREEP_ACCELERATION")
+
     # Real-Time Dynamic Live Stability Alert Matrix (Evaluates physical hazard under live weather right now)
     if dyn_fs < 1.0 and len(triggers) >= 1:
         alert_lvl = "RED"
@@ -694,7 +696,7 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
         {"name": "MODIS/VIIRS Diurnal LST Swing (ATI)", "val": f"{syn['apparent_thermal_inertia']:.3f}", "refresh_cadence": "Twice Daily (12h)", "last_refresh_utc": now_utc - (now_utc % 43200)},
         {"name": "Copernicus Snow Water Equivalent (SWE)", "val": f"{max(20.0, wind_surcharge * 100.0):.1f} mm", "refresh_cadence": "Daily (24h)", "last_refresh_utc": now_utc - (now_utc % 86400)},
         {"name": "NASA SMAP 30m Downscaled Moisture", "val": f"{syn['saturation_ratio']*100:.1f}% saturation", "refresh_cadence": "Every 2-3 Days", "last_refresh_utc": now_utc - 72000},
-        {"name": "Sentinel-1 InSAR LOS Creep Velocity", "val": "2.5 mm/month", "refresh_cadence": "Every 6-12 Days", "last_refresh_utc": now_utc - 180000},
+        {"name": "Sentinel-1 InSAR LOS Creep (Viscoplastic Proxy)", "val": f"{dynamic_creep_mm_month:.1f} mm/mo", "refresh_cadence": "Every 6-12 Days (Modelled)", "last_refresh_utc": now_utc - (now_utc % 1800)},
         {"name": "Sentinel-2 NDVI Vegetation Canopy", "val": "0.32", "refresh_cadence": "Every 5 Days", "last_refresh_utc": now_utc - 120000},
         {"name": "Proglacial Lake Expansion Rate", "val": "0.0%", "refresh_cadence": "Every 5-6 Days", "last_refresh_utc": now_utc - 140000},
         {"name": "USGS Real-Time ShakeMap PGA", "val": f"{pga_g:.3f} g (M{telem.seismic_mag if telem else 0.0:.1f})", "refresh_cadence": "Real-Time Streaming", "last_refresh_utc": now_utc - 60},
@@ -739,6 +741,7 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
             "friction_phi_deg": round(syn["phi_prime_deg"], 1),
             "water_table_zw_m": round(syn["z_w_m"], 2),
             "saturation_pct": round(syn["saturation_ratio"] * 100, 1),
+            "ground_creep_mm_month": dynamic_creep_mm_month,
             "active_triggers": triggers,
             "stability_status": "CRITICAL" if dyn_fs < 1.0 else "WATCH" if dyn_fs < 1.25 else "SAFE",
         },
@@ -894,3 +897,92 @@ async def submit_ground_truth_feedback_event(payload: dict):
         },
         "events": events[::-1],
     }
+
+
+# =============================================================================
+# Weekly AI Geohazard Audit & Continuous Learning Endpoints
+# =============================================================================
+
+@router.get("/audit/staging-queues")
+async def get_audit_staging_queues(limit: int = Query(10, ge=1, le=50)):
+    """Inspect pending unstructured bulletins and satellite visual anomaly candidates."""
+    from app.core.database import get_time_series_store
+    store = get_time_series_store()
+    pending_bul = store.get_pending_bulletins(limit=limit)
+    pending_vis = store.get_pending_visual_candidates(limit=limit)
+    return {
+        "pending_bulletins_count": len(pending_bul),
+        "pending_visual_candidates_count": len(pending_vis),
+        "bulletins_sample": pending_bul,
+        "visual_candidates_sample": pending_vis,
+    }
+
+
+@router.post("/audit/trigger-weekly-audit")
+async def trigger_weekly_ai_audit_run(payload: WeeklyAuditTriggerRequest):
+    """Trigger an on-demand AI Geohazard audit run across unstructured bulletins,
+    multimodal satellite thumbnails, and equation optimization.
+    """
+    from scripts.run_weekly_ai_audit import WeeklyAIAuditPipeline
+    pipeline = WeeklyAIAuditPipeline(
+        engine=payload.engine,
+        dry_run=payload.dry_run,
+    )
+    result = pipeline.execute_complete_weekly_audit(
+        limit_bulletins=payload.limit_bulletins,
+        limit_visual=payload.limit_visual,
+    )
+    return result
+
+
+@router.get("/audit/runs")
+async def get_recent_ai_audit_runs(limit: int = Query(15, ge=1, le=100)):
+    """Fetch history of completed AI audit runs, token usage, and equation promotions."""
+    from app.core.database import get_time_series_store
+    store = get_time_series_store()
+    runs = store.get_latest_ai_audit_runs(limit=limit)
+    return {
+        "count": len(runs),
+        "runs": runs,
+    }
+
+
+@router.get("/audit/reports")
+async def list_audit_reports():
+    """List generated executive markdown audit reports and summary metrics."""
+    reports_dir = Path(__file__).resolve().parents[2] / "data" / "audit_reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    report_files = sorted(reports_dir.glob("weekly_ai_audit_*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+    items = []
+    for rf in report_files:
+        st = rf.stat()
+        items.append({
+            "filename": rf.name,
+            "size_bytes": st.st_size,
+            "modified_utc": st.st_mtime,
+            "path": str(rf),
+        })
+
+    return {
+        "count": len(items),
+        "reports": items,
+    }
+
+
+@router.get("/audit/reports/{filename}")
+async def get_audit_report_content(filename: str):
+    """Fetch the full markdown content of a specific weekly audit report."""
+    reports_dir = Path(__file__).resolve().parents[2] / "data" / "audit_reports"
+    safe_path = (reports_dir / filename).resolve()
+    if not str(safe_path).startswith(str(reports_dir.resolve())) or not safe_path.exists():
+        raise HTTPException(status_code=404, detail=f"Report '{filename}' not found.")
+
+    with open(safe_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    return {
+        "filename": filename,
+        "content_markdown": content,
+    }
+

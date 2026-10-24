@@ -21,12 +21,15 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, Any, List
 
+import numpy as np
+
 # Cap threads for shared server host
 os.environ.setdefault("OMP_NUM_THREADS", "4")
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "4")
 os.environ.setdefault("MKL_NUM_THREADS", "4")
 os.environ.setdefault("NUMEXPR_NUM_THREADS", "4")
 
+from app.core.config import settings
 from app.engine.sites_catalog import load_sites_of_interest, SiteInfo
 from app.ingestion.expanded_weather import fetch_batch_expanded_weather, LiveSiteTelemetry
 from app.ingestion.ground_truth_feedback import (
@@ -34,6 +37,7 @@ from app.ingestion.ground_truth_feedback import (
     scan_live_telemetry_for_ground_truth_confirmations,
 )
 from app.physics.feature_synthesizer import RawEarthObservationInputs, synthesize_physics_variables
+from app.physics.infinite_slope import compute_viscoplastic_creep_velocity
 from app.ml.susceptibility import synthesize_point_physics_from_terrain
 from app.ml.continuous_equation_optimizer import ContinuousEquationOptimizer
 from app.core.database import get_time_series_store, BaseTimeSeriesStore
@@ -85,6 +89,17 @@ class PerpetualEngineOrchestrator:
             wind_surcharge = telem.wind_surcharge_kpa if telem else 0.0
             pga_g = telem.seismic_pga_g if telem else 0.04
 
+            # Physically grounded slope creep velocity (mm/month) based on terrain gradient & geomechanics
+            # Initial proxy estimate before full dynamic FS convergence
+            est_fs = max(0.5, 1.25 - (rain_72h / 250.0) - (0.3 if s.slope_deg > 38.0 else 0.0))
+            site_creep_mm_month = compute_viscoplastic_creep_velocity(
+                slope_deg=s.slope_deg,
+                dynamic_fs=est_fs,
+                elevation_m=s.elevation_m,
+                hazard_type=s.hazard_type,
+                rain_72h_mm=rain_72h,
+            )
+
             # Synthesize raw inputs
             raw = RawEarthObservationInputs(
                 elevation_m=s.elevation_m,
@@ -97,7 +112,7 @@ class PerpetualEngineOrchestrator:
                 antecedent_rain_30d_api_mm=max(12.0, rain_72h * 1.5),
                 pdd_c_days_7d=telem.pdd_days if telem else 0.0,
                 bedrock_pga_g=pga_g,
-                insar_los_velocity_mm_month=2.5,
+                insar_los_velocity_mm_month=site_creep_mm_month,
                 snow_water_equivalent_mm=max(20.0, wind_surcharge * 100.0),
             )
             syn = synthesize_physics_variables(raw)
@@ -140,6 +155,8 @@ class PerpetualEngineOrchestrator:
                 triggers.append("CRITICAL_THERMAL_ICE_MELT")
             if wind_surcharge >= 0.40:
                 triggers.append("WIND_BLOWN_CORNICE_SURCHARGE")
+            if site_creep_mm_month >= 10.0:
+                triggers.append("SAR_SLOPE_CREEP_ACCELERATION")
 
             # Cascade Alert Matrix (Rule 6 - Evaluated on Real-Time Dynamic FS)
             if dynamic_fs < 1.0 and len(triggers) >= 1:
@@ -193,6 +210,26 @@ class PerpetualEngineOrchestrator:
 
         print(f"      Alert Distribution: GREEN={alert_counts['GREEN']} | YELLOW={alert_counts['YELLOW']} | ORANGE={alert_counts['ORANGE']} | RED={alert_counts['RED']}", flush=True)
 
+        # Emergency Alert Dispatch on ORANGE/RED transitions (D.4 hook).
+        # A missing/renamed alerting module must be LOUD, never silent: a silently
+        # unreachable dispatcher means nobody is warned while the system reports healthy.
+        if getattr(settings, "alerts_enabled", False):
+            try:
+                from app.alerting.notifier import dispatch_alerts
+                alert_summary = dispatch_alerts(site_evaluations)
+                print(
+                    f"      Alert dispatch: sent={alert_summary.get('sent', 0)} "
+                    f"suppressed={alert_summary.get('suppressed', 0)} "
+                    f"failed={alert_summary.get('failed', 0)}",
+                    flush=True,
+                )
+            except Exception as alert_err:
+                print(
+                    f"      ALERT DISPATCH FAILED ({type(alert_err).__name__}: {alert_err}) "
+                    f"- operators were NOT notified this cycle.",
+                    flush=True,
+                )
+
         # 3. Live Ground-Truth Event Feedback Loop (NDRRMA & Sentinel-2/SAR Scar Detection)
         print(f"[3/5] Scanning for newly verified NDRRMA / Sentinel-2 ground-truth feedback events...", flush=True)
         sites_dicts = [asdict(s) for s in self.sites]
@@ -211,6 +248,16 @@ class PerpetualEngineOrchestrator:
             flush=True,
         )
 
+        # Stage unprocessed news bulletins and visual candidates (zero API tokens used)
+        if self.cycle_count == 1 or self.cycle_count % 12 == 0:
+            try:
+                from app.ingestion.unstructured_collector import stage_unprocessed_bulletins, stage_satellite_visual_candidates
+                b_staged = stage_unprocessed_bulletins(self.store)
+                v_staged = stage_satellite_visual_candidates(self.store)
+                print(f"      Staged {b_staged} news/bulletin items and {v_staged} visual candidates into DB queues.", flush=True)
+            except Exception as e:
+                print(f"      Notice: Unstructured staging skipped: {e}", flush=True)
+
         # 4. Evolutionary Geomechanical Equation Optimization Generation
         print(f"[4/5] Running evolutionary geomechanical equation optimization generation...", flush=True)
         opt_res = self.optimizer.step_optimization_generation()
@@ -221,17 +268,44 @@ class PerpetualEngineOrchestrator:
         cycle_duration = round(time.time() - cycle_start, 2)
         print(f"[5/5] Cycle #{self.cycle_count} complete in {cycle_duration}s. Writing status snapshot...", flush=True)
 
+        # Adaptive Monsoon Cadence Throttle (G.1 & G.2)
+        max_rain_72h = max(
+            (t.rain_72h_mm for t in telemetry_map.values() if t and t.rain_72h_mm is not None),
+            default=0.0,
+        )
+        throttle_threshold = getattr(settings, "monsoon_throttle_rain_72h_mm", 150.0)
+        if getattr(settings, "adaptive_throttle_enabled", True) and max_rain_72h >= throttle_threshold:
+            current_interval = getattr(settings, "monsoon_cycle_interval_sec", 900)
+            throttle_active = True
+            throttle_desc = f"Active monsoon downpour detected ({max_rain_72h:.1f}mm >= {throttle_threshold:.1f}mm). High-risk cadence: 15-minute intervals."
+        else:
+            current_interval = getattr(settings, "normal_cycle_interval_sec", 1800)
+            throttle_active = False
+            throttle_desc = f"Normal 30-minute cadence (max 72h rain: {max_rain_72h:.1f}mm < {throttle_threshold:.1f}mm)."
+        self.fast_loop_interval_sec = current_interval
+
         status = {
             "service": "Himalayan-MHEWS Perpetual Ingestion & Physics Engine",
             "cycle_count": self.cycle_count,
             "uptime_seconds": round(time.time() - self.start_time, 1),
             "last_cycle_timestamp_utc": now_utc,
             "last_cycle_duration_sec": cycle_duration,
+            "cadence": {
+                "interval_sec": current_interval,
+                "interval_minutes": round(current_interval / 60.0, 1),
+                "throttle_active": throttle_active,
+                "max_rain_72h_mm": round(max_rain_72h, 1),
+                "description": throttle_desc,
+            },
             "monitored_sites_total": len(self.sites),
             "alert_summary": alert_counts,
-            "latest_top_risk_sites": [
-                s for s in site_evaluations if s["alert"] in ("RED", "ORANGE", "YELLOW")
-            ][:10],
+            # Sort by severity, then lowest FS first. Without this the list is in
+            # catalog order and truncating to 10 lets YELLOW sites crowd RED ones off
+            # the dashboard entirely - the most dangerous sites become invisible.
+            "latest_top_risk_sites": sorted(
+                (s for s in site_evaluations if s["alert"] in ("RED", "ORANGE", "YELLOW")),
+                key=lambda s: ({"RED": 0, "ORANGE": 1, "YELLOW": 2}[s["alert"]], s["cal_fs"]),
+            )[:10],
             "ground_truth_feedback": {
                 "total_training_catalog_points": opt_res.dataset_total_points,
                 "base_catalog_points": 949,

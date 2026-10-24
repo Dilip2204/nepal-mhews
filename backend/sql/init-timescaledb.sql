@@ -110,3 +110,59 @@ CREATE TABLE IF NOT EXISTS hazard_alerts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_alerts_level_time ON hazard_alerts (alert_level, created_at DESC);
+
+-- 6. Unprocessed Field Incident Bulletins & News Staging Queue (Weekly NLP AI Audit)
+CREATE TABLE IF NOT EXISTS unprocessed_bulletins (
+    bulletin_id VARCHAR(64) PRIMARY KEY,
+    received_utc DOUBLE PRECISION NOT NULL,
+    source VARCHAR(64) NOT NULL,
+    title TEXT NOT NULL,
+    raw_text TEXT NOT NULL,
+    url TEXT,
+    district_hint VARCHAR(64),
+    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    extracted_event_id VARCHAR(64),
+    parsed_json JSONB
+);
+
+CREATE INDEX IF NOT EXISTS idx_bulletins_status ON unprocessed_bulletins (status, received_utc DESC);
+CREATE INDEX IF NOT EXISTS idx_bulletins_source ON unprocessed_bulletins (source);
+
+-- 7. Satellite Visual Inspection Candidates Queue (Multimodal AI Verification)
+CREATE TABLE IF NOT EXISTS satellite_visual_candidates (
+    candidate_id VARCHAR(64) PRIMARY KEY,
+    detected_utc DOUBLE PRECISION NOT NULL,
+    site_id VARCHAR(64),
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
+    trigger_type VARCHAR(64) NOT NULL,
+    delta_ndvi DOUBLE PRECISION,
+    sar_velocity_mm_month DOUBLE PRECISION,
+    thumbnail_before_path TEXT,
+    thumbnail_after_path TEXT,
+    status VARCHAR(32) NOT NULL DEFAULT 'PENDING_AI_INSPECTION',
+    ai_confidence DOUBLE PRECISION,
+    ai_notes TEXT,
+    geom GEOMETRY(Point, 4326)
+);
+
+CREATE INDEX IF NOT EXISTS idx_visual_status ON satellite_visual_candidates (status, detected_utc DESC);
+CREATE INDEX IF NOT EXISTS idx_visual_geom ON satellite_visual_candidates USING GIST (geom);
+
+-- 8. AI Audit Runs & Weekly Geomechanical Evolution Log
+CREATE TABLE IF NOT EXISTS ai_audit_runs (
+    run_id VARCHAR(64) PRIMARY KEY,
+    audit_timestamp_utc DOUBLE PRECISION NOT NULL,
+    engine_used VARCHAR(64) NOT NULL,
+    bulletins_scanned INTEGER NOT NULL DEFAULT 0,
+    events_extracted INTEGER NOT NULL DEFAULT 0,
+    visual_candidates_inspected INTEGER NOT NULL DEFAULT 0,
+    visual_confirmed INTEGER NOT NULL DEFAULT 0,
+    equations_evaluated INTEGER NOT NULL DEFAULT 0,
+    promoted_to_production BOOLEAN NOT NULL DEFAULT FALSE,
+    promoted_parameters JSONB,
+    summary_report TEXT,
+    token_usage_json JSONB
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_time ON ai_audit_runs (audit_timestamp_utc DESC);
