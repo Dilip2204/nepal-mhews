@@ -310,6 +310,29 @@ def stage_unprocessed_bulletins(store: Optional[BaseTimeSeriesStore] = None) -> 
         except Exception as e:
             logger.debug("Failed staging bulletin '%s': %s", it.get("title"), e)
 
+    # GDACS: reachable, free, no key, every item carries a real coordinate - built as the
+    # stand-in for BIPAD (bipadportal.gov.np is network-blocked from this host). The module
+    # was fully built and tested (38 tests) but nothing ever called it; it does its own
+    # fetch/dedup/insert, so it is called directly rather than folded into the items loop
+    # above. Never raises and never writes to the training catalog - PENDING only.
+    try:
+        from app.ingestion.gdacs_feed import stage_gdacs_events
+
+        gdacs_summary = stage_gdacs_events(store=store)
+        if gdacs_summary.get("queued") or gdacs_summary.get("restaged_escalations"):
+            logger.info(
+                "GDACS staged %d new event(s), %d re-staged escalation(s), "
+                "%d suppressed duplicate(s)",
+                gdacs_summary.get("queued", 0),
+                gdacs_summary.get("restaged_escalations", 0),
+                gdacs_summary.get("suppressed_duplicates", 0),
+            )
+        count_staged += gdacs_summary.get("queued", 0) + gdacs_summary.get(
+            "restaged_escalations", 0
+        )
+    except Exception as gd_err:
+        logger.debug("GDACS ingestion skipped: %s", gd_err)
+
     return count_staged
 
 

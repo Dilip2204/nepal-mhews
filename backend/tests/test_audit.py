@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from app.main import app
 from app.core.database import get_time_series_store
+from app.ingestion import unstructured_collector as uc
 from app.ingestion.unstructured_collector import (
     stage_unprocessed_bulletins,
     stage_satellite_visual_candidates,
@@ -26,8 +27,22 @@ def test_district_extraction_and_keyword_relevance():
     assert is_geohazard_relevant("Stock market update", "Prices increased today") is False
 
 
-def test_staging_unprocessed_bulletins_and_visual_candidates():
-    """Verify staging of unstructured text bulletins and 512x512 satellite thumbnail candidates."""
+def test_staging_unprocessed_bulletins_and_visual_candidates(monkeypatch):
+    """Verify staging of unstructured text bulletins and 512x512 satellite thumbnail candidates.
+
+    All three live sources (Google News/Kathmandu Post RSS, GDACS, ReliefWeb) are stubbed.
+    A system meant to run unattended for six months must not have its test suite depend on
+    three external hosts being reachable and fast - this test is about the staging/dedup
+    logic, not about whether the internet is up right now.
+    """
+    monkeypatch.setattr(uc, "fetch_open_bulletins_and_rss", lambda *a, **k: [])
+    monkeypatch.setattr(
+        "app.ingestion.gdacs_feed.stage_gdacs_events",
+        lambda *a, **k: {"fetched": 0, "queued": 0, "suppressed_duplicates": 0,
+                         "restaged_escalations": 0, "errors": 0, "warnings": []},
+    )
+    monkeypatch.setattr("app.ingestion.reliefweb_feed.fetch_reports", lambda *a, **k: [])
+
     store = get_time_series_store()
 
     staged_b = stage_unprocessed_bulletins(store)
