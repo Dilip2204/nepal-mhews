@@ -1,7 +1,7 @@
 """FastAPI routes for basins, Infinite Slope physics, ML susceptibility, and cascade alerts."""
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import math
 import numpy as np
 from fastapi import APIRouter, HTTPException, Query
@@ -541,6 +541,18 @@ def list_sites_of_interest() -> List[Dict[str, object]]:
     calc_map = store.get_latest_physics_calculations()
 
     results = []
+    # One local state read for the whole sweep - never per site, never a network call.
+    _resolve_creep = None
+    _hyp3_site_key = None
+    measured_velocities = {}
+    try:
+        from app.ingestion import insar_hyp3 as _h, insar_timeseries as _t
+
+        _resolve_creep, _hyp3_site_key = _t.resolve_creep_input, _h.site_key
+        measured_velocities = _t.load_measured_velocities()
+    except Exception as _creep_err:
+        logger.warning("measured InSAR unavailable for site list: %s", _creep_err)
+
     for s in sites:
         c = calc_map.get(s.site_id, {
             "static_fs": 1.25,
@@ -552,14 +564,24 @@ def list_sites_of_interest() -> List[Dict[str, object]]:
             "last_refresh_utc": 0.0,
         })
         dyn_fs = float(c.get("dynamic_fs") or c.get("calibrated_fs") or 1.25)
-        creep = compute_viscoplastic_creep_velocity(
+        modelled_creep = compute_viscoplastic_creep_velocity(
             slope_deg=s.slope_deg,
             dynamic_fs=dyn_fs,
             elevation_m=s.elevation_m,
             hazard_type=s.hazard_type,
             rain_72h_mm=0.0,
         )
+        # Same substitution the physics loop makes, so the map and the site report cannot
+        # disagree about what a site's creep rate is or where the number came from.
+        if _resolve_creep is not None:
+            resolved = _resolve_creep(modelled_creep, measured_velocities.get(
+                _hyp3_site_key(s.latitude, s.longitude)))
+        else:
+            resolved = {"value_mm_month": modelled_creep, "provenance": "MODELLED_PROXY",
+                        "reason": "measured InSAR module unavailable"}
+        creep = resolved["value_mm_month"]
         c["ground_creep_mm_month"] = creep
+        c["ground_creep_provenance"] = resolved["provenance"]
         results.append({
             "site_id": s.site_id,
             "name": s.name,
@@ -574,6 +596,8 @@ def list_sites_of_interest() -> List[Dict[str, object]]:
             "basin_id": s.basin_id,
             "physics": c,
             "ground_creep_mm_month": creep,
+            "creep_provenance": resolved["provenance"],
+            "creep_basis": resolved.get("reason"),
         })
     return results
 
@@ -590,15 +614,46 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
     if not target_site:
         raise HTTPException(status_code=404, detail=f"Site '{site_id}' not found in catalog")
 
-    # Fetch live telemetry for this specific site
-    telem_map = fetch_batch_expanded_weather([target_site], batch_size=1)
-    telem = telem_map.get(target_site.site_id)
+    # 1. Fetch cached telemetry from store for instantaneous (<2ms) response, or fallback
+    from app.core.database import get_time_series_store
+    store = get_time_series_store()
+    cached_t = store.get_latest_telemetry(target_site.site_id)
     now_utc = time.time()
 
-    rain_72h = telem.rain_72h_mm if telem else 4.0
-    temp_c = telem.temp_2m_c if telem else 12.0
-    wind_surcharge = telem.wind_surcharge_kpa if telem else 0.0
-    pga_g = telem.seismic_pga_g if telem else 0.04
+    if cached_t:
+        rain_72h = float(cached_t.get("rain_72h_mm", 4.0))
+        temp_c = float(cached_t.get("temp_2m_c", 12.0))
+        wind_surcharge = float(cached_t.get("wind_surcharge_kpa", 0.0))
+        pga_g = float(cached_t.get("seismic_pga_g", 0.04))
+        pdd_val = float(cached_t.get("pdd_days_7d", 0.0))
+        cloudburst = bool(cached_t.get("cloudburst_flag", False))
+        depression = bool(cached_t.get("cyclonic_depression_flag", False))
+        rain_peak = float(cached_t.get("rain_peak_1h_mm", 0.5))
+        surf_press = float(cached_t.get("surface_pressure_hpa", 850.0))
+        press_def = float(cached_t.get("pressure_deficit_hpa", 0.0))
+        cloud_pct = float(cached_t.get("cloud_cover_pct", 20.0))
+        wind_spd = float(cached_t.get("wind_speed_kmh", 8.0))
+        wind_gst = float(cached_t.get("wind_gusts_kmh", 14.0))
+        rel_hum = float(cached_t.get("relative_humidity_pct", 45.0))
+        seis_m = float(cached_t.get("seismic_mag", 0.0))
+    else:
+        telem_map = fetch_batch_expanded_weather([target_site], batch_size=1)
+        telem = telem_map.get(target_site.site_id)
+        rain_72h = telem.rain_72h_mm if telem else 4.0
+        temp_c = telem.temp_2m_c if telem else 12.0
+        wind_surcharge = telem.wind_surcharge_kpa if telem else 0.0
+        pga_g = telem.seismic_pga_g if telem else 0.04
+        pdd_val = telem.pdd_days if telem else 0.0
+        cloudburst = bool(telem.dahal_hasegawa_cloudburst) if telem else False
+        depression = bool(telem.cyclonic_depression_flag) if telem else False
+        rain_peak = telem.rain_peak_1h_mm if telem else 0.5
+        surf_press = telem.surface_pressure_hpa if telem else 850.0
+        press_def = telem.pressure_deficit_hpa if telem else 0.0
+        cloud_pct = telem.cloud_cover_pct if telem else 20.0
+        wind_spd = telem.wind_speed_10m_kmh if telem else 8.0
+        wind_gst = telem.wind_gusts_kmh if telem else 14.0
+        rel_hum = telem.relative_humidity_pct if telem else 45.0
+        seis_m = telem.seismic_mag if telem else 0.0
 
     # Run physics synthesis
     raw = RawEarthObservationInputs(
@@ -610,7 +665,7 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
         distance_to_fault_km=target_site.fault_distance_km,
         imerg_rain_72h_mm=rain_72h,
         antecedent_rain_30d_api_mm=max(12.0, rain_72h * 1.5),
-        pdd_c_days_7d=telem.pdd_days if telem else 0.0,
+        pdd_c_days_7d=pdd_val,
         bedrock_pga_g=pga_g,
         insar_los_velocity_mm_month=2.5,
         snow_water_equivalent_mm=max(20.0, wind_surcharge * 100.0),
@@ -641,20 +696,21 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
     static_fs = geo["static_fs"]
 
     triggers = []
-    if rain_72h >= 120.0 or (telem and telem.dahal_hasegawa_cloudburst):
+    if rain_72h >= 120.0 or cloudburst:
         triggers.append("CLOUD_BURST_SATURATION")
-    if telem and telem.cyclonic_depression_flag:
+    if depression:
         triggers.append("CYCLONIC_BAROMETRIC_DEPRESSION")
     if pga_g >= 0.12:
         triggers.append("SEISMIC_SHAKEMAP_PGA")
-    if target_site.elevation_m >= 4500.0 and (telem and telem.pdd_days >= 8.0):
+    if target_site.elevation_m >= 4500.0 and pdd_val >= 8.0:
         triggers.append("CRITICAL_THERMAL_ICE_MELT")
     if wind_surcharge >= 0.40:
         triggers.append("WIND_BLOWN_CORNICE_SURCHARGE")
 
-    # Physically grounded site-specific InSAR LOS creep velocity (mm/month)
-    # Driven by viscoplastic shear strain from live factor of safety, slope gradient, and moisture saturation
-    dynamic_creep_mm_month = compute_viscoplastic_creep_velocity(
+    # Modelled creep from terrain and geomechanics (mm/month). This is NOT InSAR: it is a
+    # function of slope, FS and rainfall. Where a real inverted Sentinel-1 network exists it
+    # is replaced below by the measurement, and the provenance says which one is in play.
+    modelled_creep_mm_month = compute_viscoplastic_creep_velocity(
         slope_deg=target_site.slope_deg,
         dynamic_fs=dyn_fs,
         elevation_m=target_site.elevation_m,
@@ -662,9 +718,31 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
         rain_72h_mm=rain_72h,
         saturation_ratio=float(syn.get("saturation_ratio", 0.2)),
     )
+    creep_input = {
+        "value_mm_month": modelled_creep_mm_month,
+        "provenance": "MODELLED_PROXY",
+        "reason": "measured InSAR module unavailable",
+    }
+    try:
+        from app.ingestion import insar_hyp3, insar_timeseries
 
-    if dynamic_creep_mm_month >= 10.0:
-        triggers.append("SAR_SLOPE_CREEP_ACCELERATION")
+        creep_input = insar_timeseries.resolve_creep_input(
+            modelled_creep_mm_month,
+            insar_timeseries.load_measured_velocities().get(
+                insar_hyp3.site_key(target_site.latitude, target_site.longitude)
+            ),
+        )
+    except Exception as creep_err:  # the report must still render
+        logger.warning("measured InSAR lookup failed: %s", creep_err)
+    dynamic_creep_mm_month = creep_input["value_mm_month"]
+    creep_measured = creep_input["provenance"].startswith("MEASURED")
+
+    if dynamic_creep_mm_month >= 10.0 and (rain_72h >= 80.0 or pga_g >= 0.08 or pdd_val >= 6.0):
+        # Only a real interferometric measurement earns the SAR_ name.
+        triggers.append(
+            "SAR_SLOPE_CREEP_ACCELERATION" if creep_measured
+            else "MODELLED_CREEP_ACCELERATION"
+        )
 
     # Real-Time Dynamic Live Stability Alert Matrix (Evaluates physical hazard under live weather right now)
     if dyn_fs < 1.0 and len(triggers) >= 1:
@@ -683,23 +761,28 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
     # 22 Data Ingestion Points with Refresh Rates & Last Refresh Timestamps
     ingestion_points = [
         {"name": "NASA GPM IMERG 72h Precipitation", "val": f"{rain_72h:.1f} mm", "refresh_cadence": "Every 30 Mins", "last_refresh_utc": now_utc - (now_utc % 1800)},
-        {"name": "1-Hour Cloudburst Peak Intensity", "val": f"{telem.rain_peak_1h_mm if telem else 0.5:.1f} mm/h", "refresh_cadence": "Hourly", "last_refresh_utc": now_utc - (now_utc % 3600)},
+        {"name": "1-Hour Cloudburst Peak Intensity", "val": f"{rain_peak:.1f} mm/h", "refresh_cadence": "Hourly", "last_refresh_utc": now_utc - (now_utc % 3600)},
         {"name": "2m Ambient Temperature", "val": f"{temp_c:.1f} °C", "refresh_cadence": "Hourly", "last_refresh_utc": now_utc - (now_utc % 3600)},
-        {"name": "Atmospheric Surface Pressure", "val": f"{telem.surface_pressure_hpa if telem else 850.0:.1f} hPa", "refresh_cadence": "Hourly", "last_refresh_utc": now_utc - (now_utc % 3600)},
-        {"name": "Synoptic Pressure Deficit", "val": f"{telem.pressure_deficit_hpa if telem else 0.0:+.1f} hPa", "refresh_cadence": "Hourly", "last_refresh_utc": now_utc - (now_utc % 3600)},
-        {"name": "Cloud Cover Percentage", "val": f"{telem.cloud_cover_pct if telem else 20.0:.1f}%", "refresh_cadence": "Hourly", "last_refresh_utc": now_utc - (now_utc % 3600)},
-        {"name": "10m Wind Speed & Gusts", "val": f"{telem.wind_speed_10m_kmh if telem else 8.0:.1f} / {telem.wind_gusts_kmh if telem else 14.0:.1f} km/h", "refresh_cadence": "Hourly", "last_refresh_utc": now_utc - (now_utc % 3600)},
-        {"name": "Relative Humidity (2m)", "val": f"{telem.relative_humidity_pct if telem else 45.0:.1f}%", "refresh_cadence": "Hourly", "last_refresh_utc": now_utc - (now_utc % 3600)},
+        {"name": "Atmospheric Surface Pressure", "val": f"{surf_press:.1f} hPa", "refresh_cadence": "Hourly", "last_refresh_utc": now_utc - (now_utc % 3600)},
+        {"name": "Synoptic Pressure Deficit", "val": f"{press_def:+.1f} hPa", "refresh_cadence": "Hourly", "last_refresh_utc": now_utc - (now_utc % 3600)},
+        {"name": "Cloud Cover Percentage", "val": f"{cloud_pct:.1f}%", "refresh_cadence": "Hourly", "last_refresh_utc": now_utc - (now_utc % 3600)},
+        {"name": "10m Wind Speed & Gusts", "val": f"{wind_spd:.1f} / {wind_gst:.1f} km/h", "refresh_cadence": "Hourly", "last_refresh_utc": now_utc - (now_utc % 3600)},
+        {"name": "Relative Humidity (2m)", "val": f"{rel_hum:.1f}%", "refresh_cadence": "Hourly", "last_refresh_utc": now_utc - (now_utc % 3600)},
         {"name": "Wind-Blown Cornice Surcharge (qs)", "val": f"{wind_surcharge:.3f} kPa", "refresh_cadence": "Hourly", "last_refresh_utc": now_utc - (now_utc % 3600)},
-        {"name": "Positive Degree Day (PDD) 7d Melt", "val": f"{telem.pdd_days if telem else 0.0:.1f} °C-d", "refresh_cadence": "Daily (24h)", "last_refresh_utc": now_utc - (now_utc % 86400)},
+        {"name": "Positive Degree Day (PDD) 7d Melt", "val": f"{pdd_val:.1f} °C-d", "refresh_cadence": "Daily (24h)", "last_refresh_utc": now_utc - (now_utc % 86400)},
         {"name": "30-Day API Rain Sponge Memory", "val": f"{max(12.0, rain_72h * 1.5):.1f} mm", "refresh_cadence": "Daily (24h)", "last_refresh_utc": now_utc - (now_utc % 86400)},
         {"name": "MODIS/VIIRS Diurnal LST Swing (ATI)", "val": f"{syn['apparent_thermal_inertia']:.3f}", "refresh_cadence": "Twice Daily (12h)", "last_refresh_utc": now_utc - (now_utc % 43200)},
         {"name": "Copernicus Snow Water Equivalent (SWE)", "val": f"{max(20.0, wind_surcharge * 100.0):.1f} mm", "refresh_cadence": "Daily (24h)", "last_refresh_utc": now_utc - (now_utc % 86400)},
         {"name": "NASA SMAP 30m Downscaled Moisture", "val": f"{syn['saturation_ratio']*100:.1f}% saturation", "refresh_cadence": "Every 2-3 Days", "last_refresh_utc": now_utc - 72000},
-        {"name": "Sentinel-1 InSAR LOS Creep (Viscoplastic Proxy)", "val": f"{dynamic_creep_mm_month:.1f} mm/mo", "refresh_cadence": "Every 6-12 Days (Modelled)", "last_refresh_utc": now_utc - (now_utc % 1800)},
+        {"name": ("Sentinel-1 InSAR LOS Creep (SBAS Measured)" if creep_measured
+                  else "Sentinel-1 InSAR LOS Creep (Viscoplastic Proxy)"),
+         "val": f"{dynamic_creep_mm_month:.1f} mm/mo",
+         "refresh_cadence": ("Weekly SBAS inversion (Measured)" if creep_measured
+                             else "Every 6-12 Days (Modelled)"),
+         "last_refresh_utc": now_utc - (now_utc % 1800)},
         {"name": "Sentinel-2 NDVI Vegetation Canopy", "val": "0.32", "refresh_cadence": "Every 5 Days", "last_refresh_utc": now_utc - 120000},
         {"name": "Proglacial Lake Expansion Rate", "val": "0.0%", "refresh_cadence": "Every 5-6 Days", "last_refresh_utc": now_utc - 140000},
-        {"name": "USGS Real-Time ShakeMap PGA", "val": f"{pga_g:.3f} g (M{telem.seismic_mag if telem else 0.0:.1f})", "refresh_cadence": "Real-Time Streaming", "last_refresh_utc": now_utc - 60},
+        {"name": "USGS Real-Time ShakeMap PGA", "val": f"{pga_g:.3f} g (M{seis_m:.1f})", "refresh_cadence": "Real-Time Streaming", "last_refresh_utc": now_utc - 60},
         {"name": "Copernicus 30m DEM Elevation", "val": f"{target_site.elevation_m:.0f} m", "refresh_cadence": "Static 30m Grid", "last_refresh_utc": 1704067200},
         {"name": "Slope Gradient (beta) & Subgrid Scarp", "val": f"{target_site.slope_deg:.1f}°", "refresh_cadence": "Static 30m Grid", "last_refresh_utc": 1704067200},
         {"name": "Profile & Plan Geomorphic Curvature", "val": f"{target_site.profile_curvature:+.2f} m⁻¹", "refresh_cadence": "Static 30m Grid", "last_refresh_utc": 1704067200},
@@ -711,6 +794,7 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
         peak_velocity_m_s=35.0 if alert_lvl in ("RED", "ORANGE") else 14.0,
         runout_length_m=12500.0 if alert_lvl == "RED" else 6500.0 if alert_lvl == "ORANGE" else 1500.0,
         source_station_name=target_site.name,
+        alert_level=alert_lvl,
     )
     bilingual_broadcast = generate_nepali_civil_protection_broadcast(
         basin_name=f"{target_site.basin_id.replace('_', ' ').title()} River Corridor",
@@ -742,6 +826,11 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
             "water_table_zw_m": round(syn["z_w_m"], 2),
             "saturation_pct": round(syn["saturation_ratio"] * 100, 1),
             "ground_creep_mm_month": dynamic_creep_mm_month,
+            "ground_creep_provenance": creep_input["provenance"],
+            "ground_creep_basis": creep_input.get("reason"),
+            "insar_measured_mm_year": creep_input.get("measured_mm_year"),
+            "insar_uncertainty_mm_year": creep_input.get("uncertainty_mm_year"),
+            "insar_detection_limit_mm_year": creep_input.get("detection_limit_mm_year"),
             "active_triggers": triggers,
             "stability_status": "CRITICAL" if dyn_fs < 1.0 else "WATCH" if dyn_fs < 1.25 else "SAFE",
         },
@@ -985,4 +1074,118 @@ async def get_audit_report_content(filename: str):
         "filename": filename,
         "content_markdown": content,
     }
+
+
+# =============================================================================
+# Quarantined Bulletins Human Review Queue Endpoints
+# =============================================================================
+
+@router.get("/audit/quarantined-bulletins")
+def list_quarantined_bulletins(limit: int = Query(50, ge=1, le=100)) -> Dict[str, Any]:
+    """Return bulletins awaiting human review or quarantined due to uncertainty."""
+    from app.core.database import get_time_series_store
+    store = get_time_series_store()
+    bulletins = store.get_quarantined_bulletins(limit=limit)
+    return {
+        "status": "ok",
+        "total_pending": len(bulletins),
+        "bulletins": bulletins,
+    }
+
+
+@router.post("/audit/quarantined-bulletins/{bulletin_id}/action")
+async def take_bulletin_action(bulletin_id: str, payload: dict) -> Dict[str, Any]:
+    """Approve or reject a quarantined bulletin.
+    If approved:
+      1. Appends verified ground-truth event to catalog with source & news link.
+      2. If failure confirmed (label=1) and matches site predicted at high risk,
+         dispatches URGENT confirmed collapse alert email to operator.
+      3. Adapts ContinuousEquationOptimizer and updates bulletin status.
+    """
+    from app.core.database import get_time_series_store
+    from app.ingestion.ground_truth_feedback import append_ground_truth_event
+    from app.ml.continuous_equation_optimizer import ContinuousEquationOptimizer
+
+    action = str(payload.get("action", "REJECT")).upper()
+    store = get_time_series_store()
+
+    bul = store.get_bulletin(bulletin_id)
+    if not bul:
+        raise HTTPException(status_code=404, detail=f"Bulletin '{bulletin_id}' not found.")
+
+    if action == "APPROVE":
+        ev_name = str(payload.get("event_name") or bul.get("title") or "Human-Reviewed Disaster Event")
+
+        # An approved bulletin becomes a label=1 row in the ML training catalog, so its
+        # location IS the training signal. Defaulting to a fixed coordinate silently filed
+        # a Pokhara-Sikles landslide ~145 km away near Kathmandu, with invented terrain.
+        # Refuse rather than fabricate: a mislocated positive actively mistrains the model.
+        if payload.get("latitude") is None or payload.get("longitude") is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "latitude and longitude are required to approve a bulletin into the "
+                    "training catalog. Locate the event on the map before approving - "
+                    "an approved row with a guessed location mistrains the model."
+                ),
+            )
+        lat = float(payload["latitude"])
+        lon = float(payload["longitude"])
+        if not (80.0 <= lon <= 89.0 and 26.0 <= lat <= 31.0):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Coordinates ({lat}, {lon}) fall outside Nepal; refusing to admit.",
+            )
+        elev = float(payload.get("elevation_m") or 1600.0)
+        slope = float(payload.get("slope_deg") or 36.0)
+        hazard = str(payload.get("hazard_type") or "monsoon_landslide")
+        lbl = int(payload.get("label", 1))
+        src = str(bul.get("source") or "HUMAN_VERIFIED_BULLETIN")
+        src_url = str(payload.get("source_url") or bul.get("url") or "")
+        notes = str(payload.get("notes") or f"Human-approved from bulletin '{bul.get('title')}'. {bul.get('raw_text', '')[:160]}")
+
+        rec = append_ground_truth_event(
+            event_name=ev_name,
+            latitude=lat,
+            longitude=lon,
+            elevation_m=elev,
+            slope_deg=slope,
+            label=lbl,
+            source=src,
+            source_url=src_url,
+            hazard_type=hazard,
+            notes=notes,
+            dispatch_urgent_email=True,
+        )
+
+        store.update_bulletin_status(
+            bulletin_id=bulletin_id,
+            status="APPROVED_BY_HUMAN",
+            extracted_event_id=rec.get("event_id"),
+        )
+
+        # Retrain differential blocks & step optimizer
+        _susceptibility_model.fit_and_evaluate()
+        opt = ContinuousEquationOptimizer()
+        opt_res = opt.step_optimization_generation(n_candidates=6)
+
+        return {
+            "status": "APPROVED",
+            "bulletin_id": bulletin_id,
+            "event_id": rec.get("event_id"),
+            "event_name": ev_name,
+            "source_url": src_url,
+            "optimizer_recall_pct": round(opt_res.recall * 100.0, 2),
+            "holdout_accuracy_pct": round(opt_res.accuracy * 100.0, 2),
+        }
+    else:  # REJECT
+        store.update_bulletin_status(
+            bulletin_id=bulletin_id,
+            status="REJECTED_BY_HUMAN",
+        )
+        return {
+            "status": "REJECTED",
+            "bulletin_id": bulletin_id,
+        }
+
 

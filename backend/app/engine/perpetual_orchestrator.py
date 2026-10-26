@@ -82,6 +82,20 @@ class PerpetualEngineOrchestrator:
         site_evaluations = []
         now_utc = time.time()
 
+        # Measured Sentinel-1 SBAS velocities, read once from local state (no network calls
+        # in this loop). Sites without an inverted network simply are not in here and fall
+        # back to the modelled proxy, labelled as such.
+        try:
+            from app.ingestion import insar_hyp3, insar_timeseries
+            measured_velocities = insar_timeseries.load_measured_velocities()
+        except Exception as insar_err:
+            print(f"      [warn] measured InSAR unavailable ({type(insar_err).__name__}: "
+                  f"{insar_err}) - all sites fall back to the modelled creep proxy", flush=True)
+            insar_hyp3 = None
+            insar_timeseries = None
+            measured_velocities = {}
+        insar_provenance_counts = {}
+
         for s in self.sites:
             telem = telemetry_map.get(s.site_id)
             rain_72h = telem.rain_72h_mm if telem else 4.0
@@ -92,13 +106,25 @@ class PerpetualEngineOrchestrator:
             # Physically grounded slope creep velocity (mm/month) based on terrain gradient & geomechanics
             # Initial proxy estimate before full dynamic FS convergence
             est_fs = max(0.5, 1.25 - (rain_72h / 250.0) - (0.3 if s.slope_deg > 38.0 else 0.0))
-            site_creep_mm_month = compute_viscoplastic_creep_velocity(
+            modelled_creep_mm_month = compute_viscoplastic_creep_velocity(
                 slope_deg=s.slope_deg,
                 dynamic_fs=est_fs,
                 elevation_m=s.elevation_m,
                 hazard_type=s.hazard_type,
                 rain_72h_mm=rain_72h,
             )
+            measured_record = (
+                measured_velocities.get(insar_hyp3.site_key(s.latitude, s.longitude))
+                if insar_hyp3 is not None else None
+            )
+            creep_input = insar_timeseries.resolve_creep_input(
+                modelled_creep_mm_month, measured_record
+            ) if insar_timeseries is not None else {
+                "value_mm_month": modelled_creep_mm_month,
+                "provenance": "MODELLED_PROXY",
+                "reason": "measured InSAR not loaded this cycle",
+            }
+            site_creep_mm_month = creep_input["value_mm_month"]
 
             # Synthesize raw inputs
             raw = RawEarthObservationInputs(
@@ -143,6 +169,28 @@ class PerpetualEngineOrchestrator:
             static_fs = geo["static_fs"]
             cal_fs = dynamic_fs
 
+            # Converged site creep velocity with dynamic FS
+            converged_creep_mm_month = compute_viscoplastic_creep_velocity(
+                slope_deg=s.slope_deg,
+                dynamic_fs=dynamic_fs,
+                elevation_m=s.elevation_m,
+                hazard_type=s.hazard_type,
+                rain_72h_mm=rain_72h,
+            )
+            # Re-decide: the modelled rate moved with the converged FS, which can flip
+            # whether the measurement is precise enough to rule it out.
+            creep_input = insar_timeseries.resolve_creep_input(
+                converged_creep_mm_month, measured_record
+            ) if measured_record else dict(
+                creep_input, value_mm_month=converged_creep_mm_month,
+                heuristic_mm_month=round(converged_creep_mm_month, 3),
+            )
+            site_creep_mm_month = creep_input["value_mm_month"]
+            creep_provenance = creep_input.get("provenance", "MODELLED_PROXY")
+            insar_provenance_counts[creep_provenance] = (
+                insar_provenance_counts.get(creep_provenance, 0) + 1
+            )
+
             # Precursor triggers check under live telemetry
             triggers = []
             if rain_72h >= 120.0 or (telem and telem.dahal_hasegawa_cloudburst):
@@ -155,13 +203,20 @@ class PerpetualEngineOrchestrator:
                 triggers.append("CRITICAL_THERMAL_ICE_MELT")
             if wind_surcharge >= 0.40:
                 triggers.append("WIND_BLOWN_CORNICE_SURCHARGE")
-            if site_creep_mm_month >= 10.0:
-                triggers.append("SAR_SLOPE_CREEP_ACCELERATION")
+            if site_creep_mm_month >= 10.0 and (rain_72h >= 80.0 or pga_g >= 0.08 or (telem and telem.pdd_days >= 6.0)):
+                # Only a real interferometric measurement may be called SAR evidence. The
+                # modelled proxy is a function of slope, FS and rain - naming it SAR_* made
+                # a terrain heuristic look like an observation.
+                triggers.append(
+                    "SAR_SLOPE_CREEP_ACCELERATION"
+                    if creep_provenance.startswith("MEASURED")
+                    else "MODELLED_CREEP_ACCELERATION"
+                )
 
             # Cascade Alert Matrix (Rule 6 - Evaluated on Real-Time Dynamic FS)
             if dynamic_fs < 1.0 and len(triggers) >= 1:
                 lvl = "RED"
-            elif dynamic_fs < 1.0 or len(triggers) >= 2:
+            elif dynamic_fs < 1.05 or len(triggers) >= 2:
                 lvl = "ORANGE"
             elif dynamic_fs < 1.25 or len(triggers) == 1:
                 lvl = "YELLOW"
@@ -186,6 +241,10 @@ class PerpetualEngineOrchestrator:
                 active_triggers=triggers,
                 lat=s.latitude,
                 lon=s.longitude,
+                creep_mm_month=round(site_creep_mm_month, 4),
+                creep_provenance=creep_provenance,
+                insar_velocity_mm_year=creep_input.get("measured_mm_year"),
+                insar_uncertainty_mm_year=creep_input.get("uncertainty_mm_year"),
             )
             if telem:
                 self.store.insert_telemetry_snapshot(
@@ -206,8 +265,16 @@ class PerpetualEngineOrchestrator:
                 "cal_fs": round(cal_fs, 2),
                 "alert": lvl,
                 "triggers": triggers,
+                "creep_mm_month": round(site_creep_mm_month, 3),
+                "creep_provenance": creep_provenance,
+                "creep_basis": creep_input.get("reason"),
+                "insar_measured_mm_year": creep_input.get("measured_mm_year"),
+                "insar_uncertainty_mm_year": creep_input.get("uncertainty_mm_year"),
             })
 
+        if insar_provenance_counts:
+            print("      Creep input provenance: " + " | ".join(
+                f"{k}={v}" for k, v in sorted(insar_provenance_counts.items())), flush=True)
         print(f"      Alert Distribution: GREEN={alert_counts['GREEN']} | YELLOW={alert_counts['YELLOW']} | ORANGE={alert_counts['ORANGE']} | RED={alert_counts['RED']}", flush=True)
 
         # Emergency Alert Dispatch on ORANGE/RED transitions (D.4 hook).

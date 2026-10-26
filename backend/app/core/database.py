@@ -24,6 +24,15 @@ DEFAULT_SQLITE_PATH = DATA_DIR / "perpetual_telemetry.db"
 # Raw telemetry columns persisted on every cycle (shared by both engines).
 # Columns not measured live (e.g. api_rain_30d_mm, insar_creep_mm_month) stay NULL
 # rather than being filled with proxies, so downstream AI audits see real data only.
+# Columns added to physics_calculations after the table first shipped. Applied
+# idempotently at init so an existing database picks them up without a manual migration.
+PHYSICS_CALC_COLUMNS: List[Tuple[str, str]] = [
+    ("creep_mm_month", "REAL"),
+    ("creep_provenance", "TEXT"),
+    ("insar_velocity_mm_year", "REAL"),
+    ("insar_uncertainty_mm_year", "REAL"),
+]
+
 TELEMETRY_COLUMNS: List[Tuple[str, str]] = [
     ("rain_72h_mm", "REAL"),
     ("rain_peak_1h_mm", "REAL"),
@@ -115,6 +124,12 @@ POSTGIS_TIMESCALEDB_DDL: List[str] = [
     "ALTER TABLE telemetry_snapshots ADD COLUMN IF NOT EXISTS seismic_mag DOUBLE PRECISION;",
     "ALTER TABLE telemetry_snapshots ADD COLUMN IF NOT EXISTS cloudburst_flag BOOLEAN;",
     "ALTER TABLE telemetry_snapshots ADD COLUMN IF NOT EXISTS cyclonic_depression_flag BOOLEAN;",
+    # Which creep figure the FS was actually computed from. Without this, six months of
+    # history cannot distinguish a measured velocity from the terrain heuristic.
+    "ALTER TABLE physics_calculations ADD COLUMN IF NOT EXISTS creep_mm_month DOUBLE PRECISION;",
+    "ALTER TABLE physics_calculations ADD COLUMN IF NOT EXISTS creep_provenance VARCHAR(32);",
+    "ALTER TABLE physics_calculations ADD COLUMN IF NOT EXISTS insar_velocity_mm_year DOUBLE PRECISION;",
+    "ALTER TABLE physics_calculations ADD COLUMN IF NOT EXISTS insar_uncertainty_mm_year DOUBLE PRECISION;",
     "SELECT create_hypertable('telemetry_snapshots', 'ts', if_not_exists => TRUE, chunk_time_interval => INTERVAL '1 day');",
     "CREATE INDEX IF NOT EXISTS idx_telemetry_site_ts ON telemetry_snapshots (site_id, ts DESC);",
     "CREATE INDEX IF NOT EXISTS idx_telemetry_geom ON telemetry_snapshots USING GIST (geom);",
@@ -131,6 +146,10 @@ POSTGIS_TIMESCALEDB_DDL: List[str] = [
         failure_prob_pct DOUBLE PRECISION NOT NULL,
         alert_level VARCHAR(16) NOT NULL,
         active_triggers TEXT,
+        creep_mm_month DOUBLE PRECISION,
+        creep_provenance VARCHAR(32),
+        insar_velocity_mm_year DOUBLE PRECISION,
+        insar_uncertainty_mm_year DOUBLE PRECISION,
         geom GEOMETRY(Point, 4326)
     );
     """,
@@ -256,6 +275,10 @@ class BaseTimeSeriesStore:
         active_triggers: List[str],
         lat: Optional[float] = None,
         lon: Optional[float] = None,
+        creep_mm_month: Optional[float] = None,
+        creep_provenance: Optional[str] = None,
+        insar_velocity_mm_year: Optional[float] = None,
+        insar_uncertainty_mm_year: Optional[float] = None,
     ) -> None:
         raise NotImplementedError
 
@@ -272,6 +295,9 @@ class BaseTimeSeriesStore:
     def get_latest_physics_calculations(self) -> Dict[str, Dict[str, Any]]:
         raise NotImplementedError
 
+    def get_latest_telemetry(self, site_id: str) -> Optional[Dict[str, Any]]:
+        raise NotImplementedError
+
     def get_active_disaster_indicator(self) -> Dict[str, Any]:
         raise NotImplementedError
 
@@ -280,6 +306,12 @@ class BaseTimeSeriesStore:
         raise NotImplementedError
 
     def get_pending_bulletins(self, limit: int = 50) -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
+    def get_quarantined_bulletins(self, limit: int = 50) -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
+    def get_bulletin(self, bulletin_id: str) -> Optional[Dict[str, Any]]:
         raise NotImplementedError
 
     def update_bulletin_status(
@@ -365,6 +397,10 @@ class TimescalePostGISStore(BaseTimeSeriesStore):
         active_triggers: List[str],
         lat: Optional[float] = None,
         lon: Optional[float] = None,
+        creep_mm_month: Optional[float] = None,
+        creep_provenance: Optional[str] = None,
+        insar_velocity_mm_year: Optional[float] = None,
+        insar_uncertainty_mm_year: Optional[float] = None,
     ) -> None:
         conn = self.pool.getconn()
         try:
@@ -383,6 +419,10 @@ class TimescalePostGISStore(BaseTimeSeriesStore):
                     failure_prob_pct,
                     alert_level,
                     ",".join(active_triggers),
+                    creep_mm_month,
+                    creep_provenance,
+                    insar_velocity_mm_year,
+                    insar_uncertainty_mm_year,
                 ]
                 if lat and lon:
                     params.extend([lon, lat])
@@ -390,16 +430,18 @@ class TimescalePostGISStore(BaseTimeSeriesStore):
                         INSERT INTO physics_calculations (
                             ts, site_id, soil_depth_z_m, c_prime_kpa, phi_prime_deg,
                             static_fs, dynamic_fs, calibrated_fs, failure_prob_pct,
-                            alert_level, active_triggers, geom
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, {geom_sql})
+                            alert_level, active_triggers, creep_mm_month, creep_provenance,
+                            insar_velocity_mm_year, insar_uncertainty_mm_year, geom
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, {geom_sql})
                     """
                 else:
                     sql = """
                         INSERT INTO physics_calculations (
                             ts, site_id, soil_depth_z_m, c_prime_kpa, phi_prime_deg,
                             static_fs, dynamic_fs, calibrated_fs, failure_prob_pct,
-                            alert_level, active_triggers
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            alert_level, active_triggers, creep_mm_month, creep_provenance,
+                            insar_velocity_mm_year, insar_uncertainty_mm_year
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """
                 cur.execute(sql, params)
             conn.commit()
@@ -457,6 +499,51 @@ class TimescalePostGISStore(BaseTimeSeriesStore):
                     ),
                 )
             conn.commit()
+        finally:
+            self.pool.putconn(conn)
+
+    def get_latest_telemetry(self, site_id: str) -> Optional[Dict[str, Any]]:
+        conn = self.pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT rain_72h_mm, rain_peak_1h_mm, temp_2m_c, surface_pressure_hpa,
+                           pressure_deficit_hpa, cloud_cover_pct, wind_speed_kmh, wind_gusts_kmh,
+                           wind_surcharge_kpa, pdd_days_7d, api_rain_30d_mm, ati_diurnal_lst,
+                           smap_saturation_pct, insar_creep_mm_month, seismic_pga_g, relative_humidity_pct,
+                           seismic_mag, cloudburst_flag, cyclonic_depression_flag
+                    FROM telemetry_snapshots
+                    WHERE site_id = %s
+                    ORDER BY ts DESC
+                    LIMIT 1;
+                    """,
+                    (site_id,),
+                )
+                r = cur.fetchone()
+                if not r:
+                    return None
+                return {
+                    "rain_72h_mm": r[0] if r[0] is not None else 0.0,
+                    "rain_peak_1h_mm": r[1] if r[1] is not None else 0.0,
+                    "temp_2m_c": r[2] if r[2] is not None else 12.0,
+                    "surface_pressure_hpa": r[3] if r[3] is not None else 850.0,
+                    "pressure_deficit_hpa": r[4] if r[4] is not None else 0.0,
+                    "cloud_cover_pct": r[5] if r[5] is not None else 20.0,
+                    "wind_speed_kmh": r[6] if r[6] is not None else 8.0,
+                    "wind_gusts_kmh": r[7] if r[7] is not None else 14.0,
+                    "wind_surcharge_kpa": r[8] if r[8] is not None else 0.0,
+                    "pdd_days_7d": r[9] if r[9] is not None else 0.0,
+                    "api_rain_30d_mm": r[10] if r[10] is not None else 12.0,
+                    "ati_diurnal_lst": r[11] if r[11] is not None else 0.05,
+                    "smap_saturation_pct": r[12] if r[12] is not None else 20.0,
+                    "insar_creep_mm_month": r[13] if r[13] is not None else 2.5,
+                    "seismic_pga_g": r[14] if r[14] is not None else 0.02,
+                    "relative_humidity_pct": r[15] if r[15] is not None else 45.0,
+                    "seismic_mag": r[16] if r[16] is not None else 0.0,
+                    "cloudburst_flag": bool(r[17]),
+                    "cyclonic_depression_flag": bool(r[18]),
+                }
         finally:
             self.pool.putconn(conn)
 
@@ -520,10 +607,11 @@ class TimescalePostGISStore(BaseTimeSeriesStore):
                 warning_sites = []
                 for row in cur.fetchall():
                     sid, dyn_fs, lvl, trigs = row[0], float(row[1]), row[2], row[3] or ""
-                    trig_list = trigs.split(",") if trigs else []
-                    if dyn_fs < 1.0 and len(trig_list) >= 1:
+                    trig_list = [t.strip() for t in trigs.split(",") if t.strip()]
+                    primary_trigs = [t for t in trig_list if t in ("CLOUD_BURST_SATURATION", "CYCLONIC_BAROMETRIC_DEPRESSION", "SEISMIC_SHAKEMAP_PGA", "CRITICAL_THERMAL_ICE_MELT", "WIND_BLOWN_CORNICE_SURCHARGE")]
+                    if dyn_fs < 1.0 and len(primary_trigs) >= 1:
                         critical_sites.append({"site_id": sid, "dynamic_fs": dyn_fs, "triggers": trigs})
-                    elif dyn_fs < 1.0 or len(trig_list) >= 2:
+                    elif dyn_fs < 1.0 or len(trig_list) >= 2 or (dyn_fs < 1.08 and len(trig_list) >= 1):
                         warning_sites.append({"site_id": sid, "dynamic_fs": dyn_fs, "triggers": trigs})
 
                 if critical_sites:
@@ -618,6 +706,71 @@ class TimescalePostGISStore(BaseTimeSeriesStore):
                     }
                     for r in rows
                 ]
+        finally:
+            self.pool.putconn(conn)
+
+    def get_quarantined_bulletins(self, limit: int = 50) -> List[Dict[str, Any]]:
+        conn = self.pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT bulletin_id, received_utc, source, title, raw_text, url, district_hint, status, extracted_event_id, parsed_json
+                    FROM unprocessed_bulletins
+                    WHERE status IN ('NEEDS_HUMAN_REVIEW', 'PENDING')
+                    ORDER BY received_utc DESC
+                    LIMIT %s;
+                    """,
+                    (limit,),
+                )
+                rows = cur.fetchall()
+                return [
+                    {
+                        "bulletin_id": r[0],
+                        "received_utc": r[1],
+                        "received_human": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(r[1])),
+                        "source": r[2],
+                        "title": r[3],
+                        "raw_text": r[4],
+                        "url": r[5] or "",
+                        "district_hint": r[6] or "",
+                        "status": r[7],
+                        "extracted_event_id": r[8],
+                        "parsed_json": r[9],
+                    }
+                    for r in rows
+                ]
+        finally:
+            self.pool.putconn(conn)
+
+    def get_bulletin(self, bulletin_id: str) -> Optional[Dict[str, Any]]:
+        conn = self.pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT bulletin_id, received_utc, source, title, raw_text, url, district_hint, status, extracted_event_id, parsed_json
+                    FROM unprocessed_bulletins
+                    WHERE bulletin_id = %s;
+                    """,
+                    (bulletin_id,),
+                )
+                r = cur.fetchone()
+                if not r:
+                    return None
+                return {
+                    "bulletin_id": r[0],
+                    "received_utc": r[1],
+                    "received_human": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(r[1])),
+                    "source": r[2],
+                    "title": r[3],
+                    "raw_text": r[4],
+                    "url": r[5] or "",
+                    "district_hint": r[6] or "",
+                    "status": r[7],
+                    "extracted_event_id": r[8],
+                    "parsed_json": r[9],
+                }
         finally:
             self.pool.putconn(conn)
 
@@ -930,9 +1083,25 @@ class SQLiteTimeSeriesStore(BaseTimeSeriesStore):
                     failure_prob_pct REAL,
                     alert_level TEXT,
                     active_triggers TEXT,
+                    creep_mm_month REAL,
+                    creep_provenance TEXT,
+                    insar_velocity_mm_year REAL,
+                    insar_uncertainty_mm_year REAL,
                     FOREIGN KEY (site_id) REFERENCES sites(site_id)
                 );
             """)
+            # Same idempotent migration as telemetry_snapshots, for databases that
+            # predate the measured-InSAR columns.
+            cur.execute("PRAGMA table_info(physics_calculations)")
+            physics_cols = {r[1] for r in cur.fetchall()}
+            for col, col_type in PHYSICS_CALC_COLUMNS:
+                if col not in physics_cols:
+                    try:
+                        cur.execute(
+                            f"ALTER TABLE physics_calculations ADD COLUMN {col} {col_type};"
+                        )
+                    except Exception as e:
+                        logger.debug("SQLite column migration (%s): %s", col, e)
             cur.execute("CREATE INDEX IF NOT EXISTS idx_calc_site ON physics_calculations(site_id, id DESC);")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_calc_alert ON physics_calculations(alert_level);")
 
@@ -1009,6 +1178,10 @@ class SQLiteTimeSeriesStore(BaseTimeSeriesStore):
         active_triggers: List[str],
         lat: Optional[float] = None,
         lon: Optional[float] = None,
+        creep_mm_month: Optional[float] = None,
+        creep_provenance: Optional[str] = None,
+        insar_velocity_mm_year: Optional[float] = None,
+        insar_uncertainty_mm_year: Optional[float] = None,
     ) -> None:
         conn = self._get_connection()
         try:
@@ -1017,8 +1190,10 @@ class SQLiteTimeSeriesStore(BaseTimeSeriesStore):
                 """
                 INSERT INTO physics_calculations (
                     timestamp_utc, site_id, soil_depth_z_m, c_prime_kpa, phi_prime_deg,
-                    static_fs, dynamic_fs, calibrated_fs, failure_prob_pct, alert_level, active_triggers
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    static_fs, dynamic_fs, calibrated_fs, failure_prob_pct, alert_level,
+                    active_triggers, creep_mm_month, creep_provenance,
+                    insar_velocity_mm_year, insar_uncertainty_mm_year
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     timestamp_utc,
@@ -1032,6 +1207,10 @@ class SQLiteTimeSeriesStore(BaseTimeSeriesStore):
                     failure_prob_pct,
                     alert_level,
                     ",".join(active_triggers),
+                    creep_mm_month,
+                    creep_provenance,
+                    insar_velocity_mm_year,
+                    insar_uncertainty_mm_year,
                 ),
             )
             conn.commit()
@@ -1058,6 +1237,51 @@ class SQLiteTimeSeriesStore(BaseTimeSeriesStore):
                 vals,
             )
             conn.commit()
+        finally:
+            conn.close()
+
+    def get_latest_telemetry(self, site_id: str) -> Optional[Dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT rain_72h_mm, rain_peak_1h_mm, temp_2m_c, surface_pressure_hpa,
+                       pressure_deficit_hpa, cloud_cover_pct, wind_speed_kmh, wind_gusts_kmh,
+                       wind_surcharge_kpa, pdd_days_7d, api_rain_30d_mm, ati_diurnal_lst,
+                       smap_saturation_pct, insar_creep_mm_month, seismic_pga_g, relative_humidity_pct,
+                       seismic_mag, cloudburst_flag, cyclonic_depression_flag
+                FROM telemetry_snapshots
+                WHERE site_id = ?
+                ORDER BY timestamp_utc DESC
+                LIMIT 1;
+                """,
+                (site_id,),
+            )
+            r = cur.fetchone()
+            if not r:
+                return None
+            return {
+                "rain_72h_mm": r[0] if r[0] is not None else 0.0,
+                "rain_peak_1h_mm": r[1] if r[1] is not None else 0.0,
+                "temp_2m_c": r[2] if r[2] is not None else 12.0,
+                "surface_pressure_hpa": r[3] if r[3] is not None else 850.0,
+                "pressure_deficit_hpa": r[4] if r[4] is not None else 0.0,
+                "cloud_cover_pct": r[5] if r[5] is not None else 20.0,
+                "wind_speed_kmh": r[6] if r[6] is not None else 8.0,
+                "wind_gusts_kmh": r[7] if r[7] is not None else 14.0,
+                "wind_surcharge_kpa": r[8] if r[8] is not None else 0.0,
+                "pdd_days_7d": r[9] if r[9] is not None else 0.0,
+                "api_rain_30d_mm": r[10] if r[10] is not None else 12.0,
+                "ati_diurnal_lst": r[11] if r[11] is not None else 0.05,
+                "smap_saturation_pct": r[12] if r[12] is not None else 20.0,
+                "insar_creep_mm_month": r[13] if r[13] is not None else 2.5,
+                "seismic_pga_g": r[14] if r[14] is not None else 0.02,
+                "relative_humidity_pct": r[15] if r[15] is not None else 45.0,
+                "seismic_mag": r[16] if r[16] is not None else 0.0,
+                "cloudburst_flag": bool(r[17]),
+                "cyclonic_depression_flag": bool(r[18]),
+            }
         finally:
             conn.close()
 
@@ -1119,6 +1343,71 @@ class SQLiteTimeSeriesStore(BaseTimeSeriesStore):
                 }
                 for r in rows
             ]
+        finally:
+            conn.close()
+
+    def get_quarantined_bulletins(self, limit: int = 50) -> List[Dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT bulletin_id, received_utc, source, title, raw_text, url, district_hint, status, extracted_event_id, parsed_json
+                FROM unprocessed_bulletins
+                WHERE status IN ('NEEDS_HUMAN_REVIEW', 'PENDING')
+                ORDER BY received_utc DESC
+                LIMIT ?;
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+            return [
+                {
+                    "bulletin_id": r[0],
+                    "received_utc": r[1],
+                    "received_human": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(r[1])),
+                    "source": r[2],
+                    "title": r[3],
+                    "raw_text": r[4],
+                    "url": r[5] or "",
+                    "district_hint": r[6] or "",
+                    "status": r[7],
+                    "extracted_event_id": r[8],
+                    "parsed_json": json.loads(r[9]) if r[9] else None,
+                }
+                for r in rows
+            ]
+        finally:
+            conn.close()
+
+    def get_bulletin(self, bulletin_id: str) -> Optional[Dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT bulletin_id, received_utc, source, title, raw_text, url, district_hint, status, extracted_event_id, parsed_json
+                FROM unprocessed_bulletins
+                WHERE bulletin_id = ?;
+                """,
+                (bulletin_id,),
+            )
+            r = cur.fetchone()
+            if not r:
+                return None
+            return {
+                "bulletin_id": r[0],
+                "received_utc": r[1],
+                "received_human": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(r[1])),
+                "source": r[2],
+                "title": r[3],
+                "raw_text": r[4],
+                "url": r[5] or "",
+                "district_hint": r[6] or "",
+                "status": r[7],
+                "extracted_event_id": r[8],
+                "parsed_json": json.loads(r[9]) if r[9] else None,
+            }
         finally:
             conn.close()
 
@@ -1409,10 +1698,13 @@ class SQLiteTimeSeriesStore(BaseTimeSeriesStore):
             critical_sites = []
             warning_sites = []
             for row in cur.fetchall():
-                if row[2] == "RED":
-                    critical_sites.append({"site_id": row[0], "dynamic_fs": row[1], "triggers": row[3]})
-                elif row[2] == "ORANGE":
-                    warning_sites.append({"site_id": row[0], "dynamic_fs": row[1], "triggers": row[3]})
+                sid, dyn_fs, lvl, trigs = row[0], float(row[1]), row[2], row[3] or ""
+                trig_list = [t.strip() for t in trigs.split(",") if t.strip()]
+                primary_trigs = [t for t in trig_list if t in ("CLOUD_BURST_SATURATION", "CYCLONIC_BAROMETRIC_DEPRESSION", "SEISMIC_SHAKEMAP_PGA", "CRITICAL_THERMAL_ICE_MELT", "WIND_BLOWN_CORNICE_SURCHARGE")]
+                if lvl == "RED" and len(primary_trigs) >= 1:
+                    critical_sites.append({"site_id": sid, "dynamic_fs": dyn_fs, "triggers": trigs})
+                elif lvl in ("RED", "ORANGE"):
+                    warning_sites.append({"site_id": sid, "dynamic_fs": dyn_fs, "triggers": trigs})
 
             if critical_sites:
                 return {
