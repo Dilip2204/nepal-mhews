@@ -214,6 +214,37 @@ def fetch_open_bulletins_and_rss(timeout_s: int = 8) -> List[Dict[str, Any]]:
 
                     if title and is_geohazard_relevant(title, clean_desc):
                         dist = extract_district_hint(title + " " + clean_desc)
+                        # The article's own publication date. Without it the pipeline used
+                        # our ingestion time as the event time, so an article from 11 Oct
+                        # parsed on 25 Oct looked like it post-dated a 23 Oct RED alert and
+                        # was emailed as a confirmed forecast - when the event actually
+                        # happened 12 days BEFORE the alert.
+                        pub_elem = item.find("pubDate")
+                        published_utc = None
+                        if pub_elem is not None and pub_elem.text:
+                            try:
+                                from email.utils import parsedate_to_datetime
+
+                                published_utc = parsedate_to_datetime(
+                                    pub_elem.text.strip()
+                                ).timestamp()
+                            except (TypeError, ValueError):
+                                published_utc = None
+                        # A publication date is not an event date. Read the text for when
+                        # the event is actually said to have happened; fall back to the
+                        # pubDate only when it says nothing, and record which it was so a
+                        # freshness check cannot mistake one for the other.
+                        event_time = None
+                        if published_utc is not None:
+                            try:
+                                from app.ingestion.event_time import extract_event_time
+
+                                event_time = extract_event_time(
+                                    title, clean_desc, published_utc
+                                )
+                            except Exception as et_err:
+                                logger.debug("event-time extraction failed: %s", et_err)
+
                         collected.append({
                             "source": src["source"],
                             "title": title,
@@ -221,6 +252,12 @@ def fetch_open_bulletins_and_rss(timeout_s: int = 8) -> List[Dict[str, Any]]:
                             "url": link,
                             "district_hint": dist,
                             "received_utc": time.time(),
+                            "published_utc": published_utc,
+                            "event_utc": (event_time or {}).get("event_utc"),
+                            "event_time_confidence": (event_time or {}).get("confidence"),
+                            "event_time_evidence": (event_time or {}).get("evidence_phrase"),
+                            "event_time_method": (event_time or {}).get("resolution_method"),
+                            "event_time_ambiguity_days": (event_time or {}).get("ambiguity_days"),
                         })
         except Exception as e:
             logger.debug("RSS fetch failed for %s (%s)", src["source"], e)
