@@ -120,6 +120,86 @@ class Settings:
         default_factory=lambda: os.getenv("MHEWS_SEED_DEMO", "0") == "1"
     )
 
+    # --- Toponym geocoding (news names a place, not coordinates) ---
+    # An LLM may EXTRACT the place name from prose, but must never produce the
+    # coordinates: a hallucinated lat/lon is indistinguishable from a real one and would
+    # poison the training catalog. Resolution is always done by an authoritative gazetteer
+    # and the resolving source is recorded alongside the result.
+    geocoding_enabled: bool = field(
+        default_factory=lambda: os.getenv("MHEWS_GEOCODING_ENABLED", "1") == "1"
+    )
+    nominatim_url: str = "https://nominatim.openstreetmap.org/search"
+    # Nominatim's usage policy requires an identifying UA and <=1 request/second.
+    nominatim_user_agent: str = field(
+        default_factory=lambda: os.getenv(
+            "MHEWS_GEOCODER_UA", "Himalayan-MHEWS/1.0 (Nepal geohazard early warning)"
+        )
+    )
+    nominatim_min_interval_sec: float = 1.1
+    geonames_url: str = "http://api.geonames.org/searchJSON"
+    # Free registration at https://www.geonames.org/login - used only as a fallback.
+    geonames_username: str = field(
+        default_factory=lambda: os.getenv("GEONAMES_USERNAME", "")
+    )
+    geocode_cache_ttl_days: int = 90
+
+    # --- Sentinel-2 optical scar verification (did the slope ACTUALLY fail?) ---
+    # Verified reachable: PC STAC search + the SAS signing endpoint give real 10 m
+    # B04/B08 pixels with no extra package and no credentials.
+    sentinel2_scar_enabled: bool = field(
+        default_factory=lambda: os.getenv("MHEWS_S2_SCAR_ENABLED", "1") == "1"
+    )
+    planetary_computer_stac_url: str = "https://planetarycomputer.microsoft.com/api/stac/v1"
+    planetary_computer_sign_url: str = "https://planetarycomputer.microsoft.com/api/sas/v1/sign"
+    # AGENTS.md M9 documents dNDVI < -0.18 as the scar signature.
+    scar_ndvi_drop_threshold: float = field(
+        default_factory=lambda: float(os.getenv("MHEWS_SCAR_DNDVI", "-0.18"))
+    )
+    scar_max_cloud_cover_pct: float = 25.0
+    scar_search_window_days: int = 45
+    scar_patch_size_px: int = 21  # ~210 m at 10 m resolution
+
+    # --- GDACS official multi-hazard feed (EU JRC) ---
+    # Every GDACS item carries coordinates, which is what BIPAD was wanted for.
+    gdacs_enabled: bool = field(
+        default_factory=lambda: os.getenv("GDACS_ENABLED", "1") == "1"
+    )
+    gdacs_rss_url: str = "https://www.gdacs.org/xml/rss.xml"
+
+    # --- ReliefWeb (UN OCHA) ---
+    # The only feed here that carries real article BODY text. Google News RSS ships the
+    # headline as its description and nothing else, so event-time and place extraction
+    # have nothing to read; ReliefWeb v2 returns a full `body` field.
+    # v1 is decommissioned (HTTP 410) and v2 returns 403 without an approved appname,
+    # which is free from https://apidoc.reliefweb.int/parameters#appname. Until one is
+    # set this source stays inert rather than failing every cycle.
+    reliefweb_appname: str = field(
+        default_factory=lambda: os.getenv("RELIEFWEB_APPNAME", "").strip()
+    )
+    reliefweb_enabled: bool = field(
+        default_factory=lambda: os.getenv("RELIEFWEB_ENABLED", "1") == "1"
+    )
+    reliefweb_api_url: str = "https://api.reliefweb.int/v2/reports"
+    reliefweb_max_items: int = field(
+        default_factory=lambda: int(os.getenv("RELIEFWEB_MAX_ITEMS", "40"))
+    )
+    reliefweb_lookback_days: int = field(
+        default_factory=lambda: int(os.getenv("RELIEFWEB_LOOKBACK_DAYS", "30"))
+    )
+
+    # --- Confirmed-prediction correlation (external event -> prior RED alert) ---
+    # News reports locate a landslide only to roughly district accuracy, so the radius
+    # must tolerate that without sweeping in unrelated sites (491 sites, dense in
+    # corridors). The measured distance is always reported so a human can judge the match.
+    confirmation_match_radius_km: float = field(
+        default_factory=lambda: float(os.getenv("MHEWS_CONFIRM_RADIUS_KM", "15.0"))
+    )
+    # A RED issued AFTER the event is hindsight, not a forecast; one issued too long
+    # before is not evidence either. Default: credit a RED up to 7 days beforehand.
+    confirmation_lookback_hours: float = field(
+        default_factory=lambda: float(os.getenv("MHEWS_CONFIRM_LOOKBACK_H", "168.0"))
+    )
+
     # --- Emergency alert dispatch (ORANGE/RED transitions) ---
     alerts_enabled: bool = field(
         default_factory=lambda: os.getenv("MHEWS_ALERTS_ENABLED", "0") == "1"
@@ -140,7 +220,9 @@ class Settings:
     telegram_chat_id: str = field(
         default_factory=lambda: os.getenv("TELEGRAM_CHAT_ID", "")
     )
-    alert_email_to: str = field(default_factory=lambda: os.getenv("MHEWS_ALERT_EMAIL_TO", ""))
+    alert_email_to: str = field(
+        default_factory=lambda: os.getenv("MHEWS_ALERT_EMAIL_TO", "dilip22kumar04@gmail.com")
+    )
     alert_email_from: str = field(
         default_factory=lambda: os.getenv("MHEWS_ALERT_EMAIL_FROM", "mhews@localhost")
     )

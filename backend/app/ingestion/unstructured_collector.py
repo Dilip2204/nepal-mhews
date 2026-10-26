@@ -278,6 +278,19 @@ def stage_unprocessed_bulletins(store: Optional[BaseTimeSeriesStore] = None) -> 
     live_items = fetch_open_bulletins_and_rss()
     items.extend(live_items)
 
+    # ReliefWeb is the only configured source that returns article BODY text, which is
+    # what event-time and place extraction need. It stays inert until RELIEFWEB_APPNAME
+    # is set, so this is a no-op rather than a per-cycle failure before registration.
+    try:
+        from app.ingestion.reliefweb_feed import fetch_reports
+
+        rw_items = fetch_reports()
+        if rw_items:
+            logger.info("ReliefWeb contributed %d report(s) with body text", len(rw_items))
+        items.extend(rw_items)
+    except Exception as rw_err:
+        logger.debug("ReliefWeb ingestion skipped: %s", rw_err)
+
     count_staged = 0
     for it in items:
         try:
