@@ -1335,3 +1335,79 @@ def test_new_measurements_carry_the_current_version(tmp_path):
     # the real products do carry them, verified: 54/54 re-measurable from local disk)
     assert out["atmospheric_correction_applied"] is True
     assert "ref_vs_outer_displacement_mm" in out
+
+
+# ------------------------------------------------------------------ derive, don't trust
+def _net_with_ref_obs(drift_mm_year, n=20, stored_stability=None):
+    """A network whose stored ref_vs_outer observations imply a known drift."""
+    import datetime as _dt
+    pairs, t0 = [], _dt.datetime(2025, 1, 1, tzinfo=timezone.utc)
+    epochs = [t0 + _dt.timedelta(days=12 * i) for i in range(n)]
+    # Connect each epoch to its next 3 neighbours, as plan_network does: a bare chain has
+    # redundancy 1.0 and the inversion rightly refuses it.
+    for i, t_a in enumerate(epochs):
+        for j in range(i + 1, min(i + 4, len(epochs))):
+            t_b = epochs[j]
+            disp = drift_mm_year * ((t_b - t_a).days / 365.25)
+            pairs.append({"job_id": f"j{i}_{j}", "status": "SUCCEEDED",
+                          "t_early": t_a.isoformat(), "t_late": t_b.isoformat(),
+                          "observation": {"displacement_mm": 0.0,
+                                          "ref_vs_outer_displacement_mm": disp,
+                                          "measurement_version": ts.MEASUREMENT_VERSION}})
+    return {"lat": 1.0, "lon": 2.0, "pairs": pairs,
+            "solution": {"reference_stability": stored_stability} if stored_stability else {}}
+
+
+def test_a_stored_stability_verdict_that_contradicts_its_own_data_is_recomputed():
+    """The failure this guards against, verbatim from production: the state file carried
+    {"stable": true, "drift_mm_year": 0.35, "drift_stderr_mm_year": 0.82} while the 54
+    observations in the SAME record inverted to -14.298 +/- 2.802 mm/yr. A reference
+    annulus moving at -14 mm/yr makes every velocity measured against it meaningless,
+    and the asserted verdict promoted the site to MEASURED_INSAR - defeating the one
+    check that existed to catch exactly this."""
+    net = _net_with_ref_obs(-14.3, stored_stability={
+        "checked": True, "stable": True, "drift_mm_year": 0.35,
+        "drift_stderr_mm_year": 0.82, "n_pairs": 39})
+    out = ts.verify_reference_stability(net)
+    assert out is not None
+    assert out["stable"] is False                       # the data wins
+    assert out["drift_mm_year"] < -10.0
+    assert out["derived_from_observations"] is True
+
+
+def test_a_genuinely_stable_reference_verifies_as_stable():
+    out = ts.verify_reference_stability(_net_with_ref_obs(0.2))
+    assert out is not None and out["stable"] is True
+
+
+def test_verification_abstains_when_there_is_nothing_to_verify():
+    """Absence of evidence must not be failed as evidence of instability."""
+    net = {"lat": 1.0, "lon": 2.0, "pairs": [
+        {"job_id": "j", "t_early": "2025-01-01T00:00:00+00:00",
+         "t_late": "2025-01-13T00:00:00+00:00",
+         "observation": {"displacement_mm": 1.0}}]}       # no ref_vs_outer at all
+    assert ts.verify_reference_stability(net) is None
+
+
+# ------------------------------------------------------------------ benchmark referencing
+def test_referencing_against_a_named_benchmark_uses_a_disc_there(tmp_path):
+    """Moving the reference off the target is only meaningful if it is MEASURED at the
+    new location, per interferogram. Asserting a benchmark's drift without re-running
+    this is how a moving reference gets certified as stable."""
+    d = _write_interferogram(tmp_path, target_phase=2.5, ref_phase=0.5)
+    annulus = ts.measure_double_difference(d, LAT, LON)
+    # a benchmark offset ~700 m east, well inside the 5 km window
+    bench_lon = LON + 700.0 / (111320.0 * math.cos(math.radians(LAT)))
+    bench = ts.measure_double_difference(d, LAT, LON, ref_lat=LAT, ref_lon=bench_lon)
+    assert annulus["reference_mode"] == "concentric_annulus"
+    assert annulus["reference_benchmark"] is None
+    assert bench["reference_mode"] == "benchmark_disc"
+    assert bench["reference_benchmark"]["lat"] == pytest.approx(LAT)
+    assert bench["reference_pixels"] > 0
+
+
+def test_a_benchmark_outside_the_window_is_refused_not_clamped(tmp_path):
+    """Silently clamping to the window edge would reference against whatever happened to
+    be there, under the benchmark's name."""
+    d = _write_interferogram(tmp_path, target_phase=2.5, ref_phase=0.5)
+    assert ts.measure_double_difference(d, LAT, LON, ref_lat=LAT + 2.0, ref_lon=LON) is None

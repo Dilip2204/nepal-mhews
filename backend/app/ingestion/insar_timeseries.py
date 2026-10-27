@@ -119,6 +119,11 @@ OUTER_CONTROL_INNER_M = 3000.0
 OUTER_CONTROL_OUTER_M = 5000.0
 REFERENCE_DRIFT_FLOOR_MM_YEAR = 3.0  # below this, flagging would just be noise-chasing
 
+# Radius of the disc sampled around a named stable benchmark, when referencing against
+# one instead of a ring around the target. Wide enough to average speckle, tight enough
+# to stay on a single landform.
+BENCHMARK_RADIUS_M = 300.0
+
 # Per-interferogram elevation-detrending thresholds (see measure_double_difference): below
 # this many pixels, or this little elevation spread, a fitted phase/elevation slope is noise
 # rather than signal, so the correction is skipped for that one pair rather than forced.
@@ -419,6 +424,9 @@ def measure_double_difference(
     outer_m: float = REFERENCE_OUTER_M,
     outer_control_inner_m: float = OUTER_CONTROL_INNER_M,
     outer_control_outer_m: float = OUTER_CONTROL_OUTER_M,
+    ref_lat: Optional[float] = None,
+    ref_lon: Optional[float] = None,
+    ref_radius_m: float = BENCHMARK_RADIUS_M,
 ) -> Optional[Dict[str, Any]]:
     """LOS displacement of the target RELATIVE to a surrounding reference annulus.
 
@@ -468,6 +476,7 @@ def measure_double_difference(
             if src.crs is not None and not src.crs.is_projected:
                 res = res * 111_320.0 * math.cos(math.radians(float(lat)))
             res = abs(res) or 80.0
+            ref_crs, ref_index = src.crs, src.index
             outer_radius_m = max(outer_m, outer_control_outer_m)
             rad_px = int(math.ceil(outer_radius_m / res))
             half = max(1, int(patch_px) // 2)
@@ -506,7 +515,37 @@ def measure_double_difference(
         dist_m = np.sqrt(((yy - cy) * res) ** 2 + ((xx - cx) * res) ** 2)
 
         target_mask = valid & (np.abs(yy - cy) <= half) & (np.abs(xx - cx) <= half)
-        ref_mask = valid & (dist_m >= inner_m) & (dist_m <= outer_m)
+
+        # The reference is normally a ring around the target, which assumes the ring is
+        # not itself moving. When that assumption fails - at glc_105 the ring drifts
+        # -14.3 +/- 2.8 mm/yr, because it sits in the same creeping colluvium as the
+        # target - the fix is to reference against a specific stable landform instead:
+        # a bedrock bench or river terrace at a known coordinate.
+        #
+        # This has to be MEASURED here, per interferogram, exactly like the target.
+        # Asserting a benchmark's drift without re-running this is how a moving
+        # reference gets certified as stable.
+        reference_mode = "concentric_annulus"
+        benchmark_px = None
+        if ref_lat is not None and ref_lon is not None:
+            bxs, bys = warp_transform(
+                "EPSG:4326", ref_crs, [float(ref_lon)], [float(ref_lat)]
+            )
+            brow, bcol = ref_index(bxs[0], bys[0])
+            by, bx = brow - r_lo, bcol - c_lo
+            if not (0 <= by < ny and 0 <= bx < nx):
+                logger.warning(
+                    "Reference benchmark (%.4f, %.4f) falls outside the %.0f m window "
+                    "around the target; refusing to re-reference",
+                    ref_lat, ref_lon, outer_radius_m,
+                )
+                return None
+            bench_dist = np.sqrt(((yy - by) * res) ** 2 + ((xx - bx) * res) ** 2)
+            ref_mask = valid & (bench_dist <= float(ref_radius_m))
+            reference_mode = "benchmark_disc"
+            benchmark_px = (int(by), int(bx))
+        else:
+            ref_mask = valid & (dist_m >= inner_m) & (dist_m <= outer_m)
 
         n_t = int(np.count_nonzero(target_mask))
         n_r = int(np.count_nonzero(ref_mask))
@@ -567,6 +606,12 @@ def measure_double_difference(
                 None if coh is None else round(float(np.nanmean(coh[target_mask])), 3)
             ),
             "measurement_version": MEASUREMENT_VERSION,
+        "reference_mode": reference_mode,
+        "reference_benchmark": (
+            None if ref_lat is None else {"lat": float(ref_lat), "lon": float(ref_lon),
+                                          "radius_m": float(ref_radius_m),
+                                          "pixel": benchmark_px}
+        ),
         "atmospheric_correction_applied": atmo_applied,
             "atmospheric_coefficient_mm_per_m": (
                 None if atmo_coefficient is None
@@ -1198,6 +1243,60 @@ def collect_network(
     }
 
 
+def verify_reference_stability(net: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Recompute the reference-annulus drift from the network's OWN observations.
+
+    A stored verdict is an assertion; the observations are evidence. This recomputes the
+    drift from `ref_vs_outer_displacement_mm` and returns a corrected stability block
+    whenever the stored one disagrees with what its own data says.
+
+    It exists because that divergence happened. The state file carried
+    `{"stable": true, "drift_mm_year": 0.35, "drift_stderr_mm_year": 0.82}` while the 54
+    observations in the same file inverted to **-14.298 +/- 2.802 mm/yr**. A reference
+    annulus moving at -14 mm/yr makes every "target" velocity measured against it
+    meaningless, and the asserted verdict promoted the site from MODELLED_PROXY to
+    MEASURED_INSAR - defeating the one check that existed to catch exactly this.
+
+    Returns None when there is nothing to check (no observations carrying the reference
+    measurement), so a genuinely unverifiable network is left alone rather than being
+    failed on absence of evidence.
+    """
+    ref_obs = []
+    for pair in net.get("pairs", []):
+        obs = pair.get("observation") or {}
+        value = obs.get("ref_vs_outer_displacement_mm")
+        if value is None:
+            continue
+        try:
+            ref_obs.append({
+                "t_early": datetime.fromisoformat(pair["t_early"]),
+                "t_late": datetime.fromisoformat(pair["t_late"]),
+                "displacement_mm": float(value),
+            })
+        except (KeyError, TypeError, ValueError):
+            continue
+    if len(ref_obs) < MIN_PAIRS:
+        return None
+
+    solution = invert_timeseries(ref_obs)
+    if solution is None:
+        return None
+    drift = float(solution["velocity_mm_year"])
+    stderr = float(solution["velocity_stderr_mm_year"])
+    unstable = (
+        abs(drift) > REFERENCE_DRIFT_FLOOR_MM_YEAR
+        and abs(drift) > 2.0 * max(stderr, 0.1)
+    )
+    return {
+        "checked": True,
+        "stable": not unstable,
+        "drift_mm_year": round(drift, 3),
+        "drift_stderr_mm_year": round(stderr, 3),
+        "n_pairs": solution["n_pairs"],
+        "derived_from_observations": True,
+    }
+
+
 def timeseries_velocity_provider(
     lat: float, lon: float, allow_network: bool = True, direction: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
@@ -1261,6 +1360,24 @@ def timeseries_velocity_provider(
         "DEM error and long-wavelength orbital ramps are unmodelled."
     ]
     ref_stability = solution.get("reference_stability") or {}
+    # Derive, do not trust. A stored verdict that contradicts the observations it claims
+    # to summarise is replaced by the recomputation, loudly.
+    recomputed = verify_reference_stability(net)
+    if recomputed is not None:
+        stored_drift = ref_stability.get("drift_mm_year")
+        if (stored_drift is None
+                or abs(float(stored_drift) - recomputed["drift_mm_year"]) > 0.5
+                or bool(ref_stability.get("stable")) != recomputed["stable"]):
+            logger.warning(
+                "Reference-stability verdict for (%.4f, %.4f) disagrees with the "
+                "observations in the same record: stored %s mm/yr stable=%s, but its own "
+                "%d observations give %+.3f +/- %.3f mm/yr stable=%s. Using the "
+                "recomputation.",
+                lat, lon, stored_drift, ref_stability.get("stable"),
+                recomputed["n_pairs"], recomputed["drift_mm_year"],
+                recomputed["drift_stderr_mm_year"], recomputed["stable"],
+            )
+        ref_stability = recomputed
     if ref_stability.get("checked") and not ref_stability.get("stable", True):
         caveats.append(
             f"REFERENCE ANNULUS MAY BE UNSTABLE: drifting "
