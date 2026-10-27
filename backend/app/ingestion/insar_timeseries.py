@@ -126,6 +126,98 @@ ELEVATION_DETREND_MIN_PIXELS = 60
 ELEVATION_DETREND_MIN_RANGE_M = 150.0
 
 
+# ---------------------------------------------------------------------------
+# multi-network keying: one network per FLIGHT DIRECTION per site
+# ---------------------------------------------------------------------------
+# A single track measures one line-of-sight component of a three-dimensional motion, so
+# one network per site can never separate downslope movement from the viewing geometry
+# that happened to be available. Ascending and descending passes see the same slope from
+# opposite sides, which is what makes the combination in `insar_combine` possible.
+#
+# The original state file held exactly one network per site, keyed by a bare
+# `hyp3.site_key(lat, lon)`. Keys are now "<site_key>@<DIRECTION>", and
+# `migrate_legacy_network_keys` rewrites the old form in place so an existing production
+# state file keeps its solved networks instead of silently losing them.
+
+FLIGHT_DIRECTIONS = ("ASCENDING", "DESCENDING")
+DIRECTION_UNKNOWN = "UNKNOWN"
+KEY_SEPARATOR = "@"
+
+
+def network_key(lat: float, lon: float, direction: str) -> str:
+    """State-file key for one site's network on one flight direction."""
+    direction = (direction or DIRECTION_UNKNOWN).upper()
+    return f"{hyp3.site_key(lat, lon)}{KEY_SEPARATOR}{direction}"
+
+
+def split_network_key(key: str) -> Tuple[str, str]:
+    """('29.5023,82.2504@ASCENDING') -> ('29.5023,82.2504', 'ASCENDING')."""
+    site, sep, direction = str(key).rpartition(KEY_SEPARATOR)
+    if not sep:
+        return str(key), DIRECTION_UNKNOWN
+    return site, (direction or DIRECTION_UNKNOWN).upper()
+
+
+def migrate_legacy_network_keys(state: Dict[str, Any]) -> int:
+    """Rewrite bare site keys to "<site_key>@<DIRECTION>". Idempotent; returns the count.
+
+    The direction of a legacy network is genuinely unknown here - the stored record
+    predates direction tracking and the observations predate look-vector extraction, so
+    there is nothing locally to infer it from. It is marked UNKNOWN rather than guessed,
+    and `backfill_network_direction` resolves it from CMR the next time the network is
+    touched. A guessed direction would silently corrupt the asc/desc combination, which
+    is exactly the kind of confident-but-wrong value this module exists to avoid.
+    """
+    networks = state.get("networks")
+    if not isinstance(networks, dict):
+        return 0
+    migrated = 0
+    for legacy in [k for k in list(networks) if KEY_SEPARATOR not in k]:
+        net = networks.pop(legacy)
+        direction = (net.get("flight_direction") or DIRECTION_UNKNOWN).upper()
+        net["flight_direction"] = direction
+        new_key = f"{legacy}{KEY_SEPARATOR}{direction}"
+        # If a network for this direction somehow already exists, keep whichever has
+        # actually been solved rather than clobbering a real result.
+        if new_key in networks:
+            incumbent = networks[new_key]
+            if incumbent is net:
+                migrated += 1
+                continue
+            # Both key forms exist for the same direction. Keep whichever is actually
+            # solved; park the loser under a suffixed key rather than dropping it, because
+            # a discarded network is spent credits and unrecoverable pair history.
+            if net.get("solution") and not incumbent.get("solution"):
+                networks[new_key] = net
+                networks[f"{new_key}+superseded"] = incumbent
+            else:
+                networks[f"{new_key}+legacy"] = net
+            logger.warning(
+                "Both a legacy and a direction-scoped network exist for %s; kept the "
+                "solved one and preserved the other under a suffixed key", new_key,
+            )
+            migrated += 1
+            continue
+        networks[new_key] = net
+        migrated += 1
+    if migrated:
+        logger.info("Migrated %d legacy InSAR network key(s) to direction-scoped keys",
+                    migrated)
+    return migrated
+
+
+def networks_for_site(
+    state: Dict[str, Any], lat: float, lon: float
+) -> Dict[str, Dict[str, Any]]:
+    """Every network recorded for one site, keyed by flight direction."""
+    prefix = f"{hyp3.site_key(lat, lon)}{KEY_SEPARATOR}"
+    out: Dict[str, Dict[str, Any]] = {}
+    for key, net in (state.get("networks") or {}).items():
+        if key.startswith(prefix):
+            out[split_network_key(key)[1]] = net
+    return out
+
+
 @dataclass
 class NetworkPlan:
     """A small-baseline pair network for one site."""
@@ -135,6 +227,11 @@ class NetworkPlan:
     polarization: str
     epochs: List[datetime]
     pairs: List[Tuple[str, str, datetime, datetime]] = field(default_factory=list)
+    # Which side the slope was viewed from. Carried through to the state record so the
+    # asc/desc combination knows what geometry each velocity came from; "UNKNOWN" when
+    # the burst metadata did not say, never inferred.
+    flight_direction: str = "UNKNOWN"
+    path_number: Optional[str] = None
 
     @property
     def redundancy(self) -> float:
@@ -150,11 +247,25 @@ def plan_network(
     max_baseline_days: int = DEFAULT_MAX_BASELINE_DAYS,
     max_pairs: int = DEFAULT_MAX_PAIRS,
     since_days: Optional[int] = 400,
+    direction: Optional[str] = None,
 ) -> Optional[NetworkPlan]:
-    """Build a redundant small-baseline network over the deepest co-pol stack at a point."""
+    """Build a redundant small-baseline network over the deepest co-pol stack at a point.
+
+    ``direction`` restricts the choice to ASCENDING or DESCENDING stacks. Left as None it
+    keeps the original behaviour - the deepest stack regardless of geometry - which is what
+    the single-network callers still want.
+    """
     stacks = hyp3.find_burst_stacks(lat, lon)
     if not stacks:
         return None
+    if direction:
+        wanted = direction.upper()
+        stacks = [
+            st for st in stacks
+            if str(getattr(st, "flight_direction", DIRECTION_UNKNOWN)).upper() == wanted
+        ]
+        if not stacks:
+            return None
     stack = stacks[0]
 
     acquisitions = sorted(stack.acquisitions, key=lambda a: a[0])  # oldest first
@@ -178,7 +289,13 @@ def plan_network(
     if not pairs:
         return None
 
-    plan = NetworkPlan(stack.burst_id, stack.swath, stack.polarization, epochs, pairs)
+    plan = NetworkPlan(
+        stack.burst_id, stack.swath, stack.polarization, epochs, pairs,
+        flight_direction=str(
+            getattr(stack, "flight_direction", DIRECTION_UNKNOWN) or DIRECTION_UNKNOWN
+        ).upper(),
+        path_number=getattr(stack, "path_number", None),
+    )
     if plan.redundancy < MIN_REDUNDANCY:
         # Submitting this would spend credits on a network the inversion will then refuse.
         logger.info(
@@ -187,6 +304,53 @@ def plan_network(
             plan.redundancy, MIN_REDUNDANCY, len(pairs), len(epochs),
         )
     return plan
+
+
+def plan_networks(
+    lat: float,
+    lon: float,
+    *,
+    connections: int = DEFAULT_CONNECTIONS,
+    max_baseline_days: int = DEFAULT_MAX_BASELINE_DAYS,
+    max_pairs: int = DEFAULT_MAX_PAIRS,
+    since_days: Optional[int] = 400,
+) -> Dict[str, NetworkPlan]:
+    """One network plan per available flight direction, keyed by direction.
+
+    Why bother with the second direction - measured, not assumed (INSAR_NOTES.md s13):
+
+      * On MODERATE slopes it buys coverage. At 35 degrees, six of twelve aspects are
+        visible to only one geometry; at 30 degrees, eight. There a second track is the
+        difference between a measurement and none.
+      * On STEEP slopes it buys no coverage at all. Sensitivity carries a
+        -sin(slope)*look_Up term that is aspect-independent and dominates as the slope
+        steepens, so at glc_105's 45.5 degrees BOTH tracks clear the gate at all twelve
+        aspects. Quoting the coverage benefit without the slope attached is wrong.
+      * Precision: 1.01x to 1.41x, sqrt(2) only where both tracks are equally sensitive.
+      * A testable assumption, at any slope - see combined_velocity_for_site.
+    """
+    stacks = hyp3.find_burst_stacks(lat, lon)
+    plans: Dict[str, NetworkPlan] = {}
+    directions = {
+        str(getattr(st, "flight_direction", DIRECTION_UNKNOWN) or DIRECTION_UNKNOWN).upper()
+        for st in stacks
+    }
+    for direction in sorted(directions):
+        if direction == DIRECTION_UNKNOWN:
+            # A stack whose geometry is unknown cannot be combined with anything, and
+            # pairing it blind would corrupt the decomposition. Skip rather than guess.
+            logger.info(
+                "Skipping a burst stack at (%.4f, %.4f) with no flight direction in its "
+                "metadata - it cannot be combined safely", lat, lon,
+            )
+            continue
+        plan = plan_network(
+            lat, lon, connections=connections, max_baseline_days=max_baseline_days,
+            max_pairs=max_pairs, since_days=since_days, direction=direction,
+        )
+        if plan is not None:
+            plans[direction] = plan
+    return plans
 
 
 # ---------------------------------------------------------------------------
@@ -604,11 +768,17 @@ def submit_network(
     connections: int = DEFAULT_CONNECTIONS,
     max_pairs: int = DEFAULT_MAX_PAIRS,
     since_days: Optional[int] = 400,
+    direction: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Plan and submit a whole small-baseline network for one site.
+    """Plan and submit a whole small-baseline network for one site and one geometry.
 
     Costs one credit per pair. Submission and collection are separate because each job
     takes roughly an hour; nothing here blocks on processing.
+
+    ``direction`` picks the flight direction. Left as None the deepest stack wins,
+    whichever way it was looking, and the record is keyed by whatever direction that
+    stack turned out to be - so a caller that does not care still gets a correctly
+    labelled network rather than an unlabelled one.
     """
     if not getattr(settings, "hyp3_enabled", False):
         return {"status": "DISABLED"}
@@ -616,14 +786,36 @@ def submit_network(
         return {"status": "NO_CREDENTIALS"}
 
     state = hyp3._load_state()
-    key = hyp3.site_key(lat, lon)
-    existing = (state.get("networks") or {}).get(key)
+    migrate_legacy_network_keys(state)
 
     plan = plan_network(
-        lat, lon, connections=connections, max_pairs=max_pairs, since_days=since_days
+        lat, lon, connections=connections, max_pairs=max_pairs,
+        since_days=since_days, direction=direction,
     )
     if plan is None:
         return {"status": "NO_NETWORK"}
+
+    # The key is direction-scoped, and the direction comes from the plan rather than the
+    # caller, so an unlabelled network can never be written.
+    key = network_key(lat, lon, plan.flight_direction)
+    existing = (state.get("networks") or {}).get(key)
+
+    # A site can have TWO stacks on the same direction (glc_105 has 337397/IW1 and
+    # 118306/IW3, both ascending), and the deepest one can change between runs. They share
+    # a key, so appending blindly would merge two different look geometries into one SBAS
+    # inversion - which produced +13.2 +/- 4.9 mm/yr from data whose honest answer is
+    # -0.3 +/- 6.7, with a residual small enough to pass the quality gate. Refuse instead.
+    if existing and existing.get("burst_id") and existing["burst_id"] != plan.burst_id:
+        return {
+            "status": "BURST_MISMATCH",
+            "existing_burst": existing.get("burst_id"),
+            "planned_burst": plan.burst_id,
+            "flight_direction": plan.flight_direction,
+            "note": (
+                "a different burst stack is already recorded for this site and direction; "
+                "appending would mix two look geometries into one inversion"
+            ),
+        }
 
     # Top up rather than refuse: a part-built network is useless until it clears
     # MIN_REDUNDANCY, so an interrupted or budget-truncated submission must be completable.
@@ -687,11 +879,16 @@ def submit_network(
         "burst_id": plan.burst_id,
         "swath": plan.swath,
         "polarization": plan.polarization,
+        "flight_direction": plan.flight_direction,
+        "path_number": plan.path_number,
         "submitted_utc": time.time(),
         "pairs": [],
         "solution": None,
     }
     record["pairs"] = list(record.get("pairs", [])) + submitted
+    # Backfill geometry onto a record created before direction tracking existed.
+    record.setdefault("flight_direction", plan.flight_direction)
+    record.setdefault("path_number", plan.path_number)
     state.setdefault("networks", {})[key] = record
     hyp3._save_state(state)
 
@@ -702,22 +899,100 @@ def submit_network(
         "pairs_total": total,
         "epochs": len(plan.epochs),
         "redundancy": round(total / max(1, len(plan.epochs) - 1), 2),
+        "flight_direction": plan.flight_direction,
         "credits_spent_this_period": hyp3.credits_spent_this_period(state),
     }
 
 
-def collect_network(lat: float, lon: float) -> Dict[str, Any]:
-    """Poll a site's network, double-difference every finished pair, then invert."""
+def backfill_network_direction(
+    state: Dict[str, Any], lat: float, lon: float
+) -> Optional[str]:
+    """Resolve an UNKNOWN network's flight direction from CMR and re-key it.
+
+    Networks recorded before direction tracking carry UNKNOWN, and an UNKNOWN network can
+    never take part in a combination - its look geometry is exactly what the combination
+    needs to know. The direction is recoverable because the burst id was stored, and the
+    burst id maps to one authoritative ASCENDING_DESCENDING value in CMR.
+
+    Makes a network call, so this belongs on the weekly collection path and never in the
+    30-minute physics loop. Returns the resolved direction, or None if nothing changed.
+    """
+    networks = state.get("networks") or {}
+    unknown_key = network_key(lat, lon, DIRECTION_UNKNOWN)
+    net = networks.get(unknown_key)
+    if not net or not net.get("burst_id"):
+        return None
+    resolved = hyp3.burst_direction(
+        net["burst_id"], net.get("swath", ""), net.get("polarization", "VV"), lat, lon
+    )
+    if resolved == DIRECTION_UNKNOWN:
+        return None
+
+    target = network_key(lat, lon, resolved)
+    if target in networks and networks[target] is not net:
+        # Something already occupies the resolved slot; leave both alone rather than
+        # silently merging two networks that were built from different stacks.
+        logger.warning(
+            "Cannot backfill direction for %s: %s already exists", unknown_key, target
+        )
+        return None
+    net["flight_direction"] = resolved
+    networks.pop(unknown_key, None)
+    networks[target] = net
+    logger.info(
+        "Backfilled flight direction %s onto the network at (%.4f, %.4f) from burst %s",
+        resolved, lat, lon, net["burst_id"],
+    )
+    return resolved
+
+
+def collect_network(
+    lat: float, lon: float, direction: Optional[str] = None
+) -> Dict[str, Any]:
+    """Poll one network, double-difference every finished pair, then invert.
+
+    ``direction`` selects which geometry's network to collect. With None and exactly one
+    network recorded for the site, that one is used - which keeps every existing caller
+    working. With None and several, the caller must say which, because collecting "the"
+    network is no longer a well-defined request.
+    """
     if not getattr(settings, "hyp3_enabled", False):
         return {"status": "DISABLED"}
     if hyp3._auth_headers() is None:
         return {"status": "NO_CREDENTIALS"}
 
     state = hyp3._load_state()
-    key = hyp3.site_key(lat, lon)
-    net = (state.get("networks") or {}).get(key)
-    if not net:
+    migrated = migrate_legacy_network_keys(state)
+    # An UNKNOWN network cannot be combined with anything, so take the one chance the
+    # weekly path has to resolve it properly. Network call; never on the hot loop.
+    backfilled = backfill_network_direction(state, lat, lon)
+    if migrated or backfilled:
+        hyp3._save_state(state)
+    available = networks_for_site(state, lat, lon)
+    if not available:
         return {"status": "NO_NETWORK"}
+    if direction and backfilled and direction.upper() == DIRECTION_UNKNOWN:
+        # The backfill just re-keyed this network from UNKNOWN to its real direction, so
+        # the caller's argument - read from the key BEFORE the backfill - now points at a
+        # key that no longer exists. Without this the weekly cron silently reports
+        # NO_NETWORK for the only solved network in the system.
+        logger.info("Network re-keyed UNKNOWN -> %s during collection; following it",
+                    backfilled)
+        direction = backfilled
+    if direction:
+        resolved = direction.upper()
+        if resolved not in available:
+            return {"status": "NO_NETWORK", "available_directions": sorted(available)}
+    elif len(available) == 1:
+        resolved = next(iter(available))
+    else:
+        return {
+            "status": "AMBIGUOUS_DIRECTION",
+            "available_directions": sorted(available),
+            "note": "several geometries recorded for this site; name one",
+        }
+    key = network_key(lat, lon, resolved)
+    net = available[resolved]
 
     pending = done = failed = newly_measured = 0
     for pair in net.get("pairs", []):
@@ -812,8 +1087,24 @@ def collect_network(lat: float, lon: float) -> Dict[str, Any]:
     if solution is not None:
         solution["reference_stability"] = ref_check
 
-    net["solution"] = solution
-    net["solved_utc"] = time.time() if solution else None
+    if solution is not None:
+        net["solution"] = solution
+        net["solved_utc"] = time.time()
+    elif net.get("solution"):
+        # Re-inversion failed - one decorrelated pair with an unwrapping error is enough,
+        # and so is numpy failing to import. Overwriting a good solution with None would
+        # throw away a result that cost 90 credits and silently revert the site to the
+        # modelled proxy. Keep the previous answer and say that it is now stale.
+        logger.warning(
+            "Re-inversion of the network at (%.4f, %.4f) produced no solution; keeping "
+            "the previous one (solved %.1f days ago) rather than discarding it",
+            net["lat"], net["lon"],
+            (time.time() - float(net.get("solved_utc") or time.time())) / 86400.0,
+        )
+        net["reinversion_failed_utc"] = time.time()
+    else:
+        net["solution"] = None
+        net["solved_utc"] = None
     hyp3._save_state(state)
 
     return {
@@ -830,9 +1121,12 @@ def collect_network(lat: float, lon: float) -> Dict[str, Any]:
 
 
 def timeseries_velocity_provider(
-    lat: float, lon: float, allow_network: bool = True
+    lat: float, lon: float, allow_network: bool = True, direction: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """A MEASURED_INSAR velocity backed by a full inverted network, or None.
+
+    ``direction`` picks one geometry's network. Left as None the best-solved network for
+    the site wins, which keeps single-geometry sites behaving exactly as before.
 
     ``allow_network=False`` forbids the one remote read in here (the Copernicus DEM
     lookup used to estimate slope aspect). The 30-minute physics loop passes False:
@@ -848,9 +1142,30 @@ def timeseries_velocity_provider(
     if not getattr(settings, "hyp3_enabled", False):
         return None
     state = hyp3._load_state()
-    net = (state.get("networks") or {}).get(hyp3.site_key(lat, lon))
-    if not net or not net.get("solution"):
+    # Keys are direction-scoped now. Looking up the bare site key would silently return
+    # nothing for every migrated network - i.e. quietly drop a real measured velocity
+    # back to the modelled proxy - so the lookup goes through networks_for_site.
+    available = networks_for_site(state, lat, lon)
+    if not available:
+        # A state file that has not been migrated yet still carries the bare key.
+        legacy = (state.get("networks") or {}).get(hyp3.site_key(lat, lon))
+        if legacy:
+            available = {DIRECTION_UNKNOWN: legacy}
+    solved = {d: n for d, n in available.items() if n.get("solution")}
+    if not solved:
         return None
+    if direction:
+        net = solved.get(direction.upper())
+        if net is None:
+            return None
+    else:
+        # Prefer the tightest solved network when the caller does not care.
+        net = min(
+            solved.values(),
+            key=lambda n: float(
+                (n.get("solution") or {}).get("velocity_stderr_mm_year") or 1e9
+            ),
+        )
 
     solution = net["solution"]
     solved_utc = float(net.get("solved_utc") or 0.0)
@@ -899,6 +1214,8 @@ def timeseries_velocity_provider(
         "residual_rms_mm": solution["residual_rms_mm"],
         "redundancy": solution["redundancy"],
         "confidence": "measured_timeseries",
+        "flight_direction": (net.get("flight_direction") or DIRECTION_UNKNOWN).upper(),
+        "path_number": net.get("path_number"),
         "reference_stability": ref_stability,
         "caveat": "; ".join(caveats),
         "age_days": None if age_days is None else round(age_days, 2),
@@ -920,8 +1237,12 @@ def timeseries_velocity_provider(
         if aspect_deg is not None:
             net["aspect_deg"] = aspect_deg
             dirty = True
-    if dirty:
-        # Persist, or the DEM would be re-fetched on every single call.
+    if dirty and allow_network:
+        # Persist, or the DEM would be re-fetched on every single call. Gated on
+        # allow_network because the 30-minute loop passes False and must stay a READER:
+        # it holds a stale snapshot for the length of a 491-site sweep, so writing it back
+        # would clobber whatever the weekly script committed in the meantime - including
+        # the credit ledger, which would then read as zero spent.
         hyp3._save_state(state)
 
     thetas = [p["observation"].get("lv_theta_rad") for p in measured_pairs if p.get("observation", {}).get("lv_theta_rad") is not None]
@@ -938,9 +1259,165 @@ def timeseries_velocity_provider(
         result["slope_parallel_velocity_mm_year"] = projection["slope_parallel_value"]
         result["slope_parallel_sensitivity"] = projection["sensitivity"]
         result["slope_parallel_reliable"] = projection["reliable"]
+        # The projection divides the velocity by the sensitivity, so the uncertainty must
+        # be divided by exactly the same number. Pairing a downslope rate with the raw
+        # line-of-sight sigma understates the error by 1/|s| - up to 6x at the 0.15 gate -
+        # and that ratio is precisely what decides MEASURED vs PROXY downstream.
+        sens = projection.get("sensitivity")
+        if projection["reliable"] and sens:
+            result["slope_parallel_uncertainty_mm_year"] = round(
+                abs(float(solution["velocity_stderr_mm_year"]) / float(sens)), 3
+            )
         result["slope_parallel_note"] = projection["note"]
         result["aspect_deg_used"] = round(float(aspect_deg), 1)
 
+    # The stack-mean look vector is what makes this network combinable with the other
+    # geometry's. Exposed even when the slope/aspect lookup failed above, because the
+    # combination needs the geometry regardless of whether a single-track projection
+    # was possible.
+    if thetas and phis:
+        import statistics
+
+        result["lv_theta_rad"] = round(statistics.fmean(thetas), 6)
+        result["lv_phi_rad"] = round(
+            math.atan2(statistics.fmean(math.sin(x) for x in phis),
+                       statistics.fmean(math.cos(x) for x in phis)), 6)
+    span = float(solution.get("span_days") or 0.0)
+    result["t_end_utc"] = solved_utc or None
+    result["t_start_utc"] = (solved_utc - span * 86400.0) if solved_utc and span else None
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# ascending + descending: one velocity per site from every geometry it has
+# ---------------------------------------------------------------------------
+def combined_velocity_for_site(
+    lat: float, lon: float, allow_network: bool = False
+) -> Optional[Dict[str, Any]]:
+    """One measured record per site, combining every solved geometry it has.
+
+    With a single geometry this returns that network's record unchanged - the common
+    case today, and the reason the combination is additive rather than a rewrite.
+
+    With two it runs `insar_combine.combine_tracks`, which is worth doing for three
+    separate reasons (measured, see INSAR_NOTES.md section 13):
+      * A TESTABLE ASSUMPTION, the only benefit that holds at every slope: two
+        observations constraining one downslope unknown leave one degree of freedom, so
+        chi-square can test "motion is purely downslope". One track has zero degrees of
+        freedom and can never be shown wrong, which is not the same as being right. The
+        test has a blind spot of its own on due north/south slopes, which is measured and
+        published per combination rather than assumed away.
+      * COVERAGE, but only on MODERATE slopes: six of twelve aspects are single-geometry
+        at 35 degrees, eight at 30 - and ZERO at glc_105's 45.5 degrees, where the
+        aspect-independent -sin(slope)*look_Up term puts both tracks over the sensitivity
+        gate at every aspect. Not a headline benefit without the slope attached.
+      * PRECISION, 1.01x-1.41x, and only where both tracks see the slope.
+      * EAST/UP: vertical separated from horizontal, which no single track can do, and
+        which needs no slope model at all.
+    """
+    state = hyp3._load_state()
+    available = networks_for_site(state, lat, lon)
+    if not available:
+        legacy = (state.get("networks") or {}).get(hyp3.site_key(lat, lon))
+        if legacy:
+            available = {DIRECTION_UNKNOWN: legacy}
+    directions = [d for d, n in available.items() if n.get("solution")]
+    if not directions:
+        return None
+
+    records: Dict[str, Dict[str, Any]] = {}
+    for direction in directions:
+        rec = timeseries_velocity_provider(
+            lat, lon, allow_network=allow_network, direction=direction
+        )
+        if rec:
+            records[direction] = rec
+    if not records:
+        return None
+
+    # Prefer the tightest as the record we hand back, then enrich it if a genuine
+    # multi-geometry combination is possible.
+    best_direction = min(
+        records, key=lambda d: float(records[d].get("uncertainty_mm_year") or 1e9)
+    )
+    result = dict(records[best_direction])
+    result["geometries_available"] = sorted(records)
+    if len(records) < 2:
+        return result
+
+    try:
+        from app.ingestion import insar_combine
+    except Exception as exc:
+        logger.warning("insar_combine unavailable; serving the single best geometry: %s", exc)
+        return result
+
+    slope_deg = next(
+        (n.get("slope_deg") for n in available.values() if n.get("slope_deg") is not None),
+        None,
+    )
+    aspect_deg = next(
+        (n.get("aspect_deg") for n in available.values() if n.get("aspect_deg") is not None),
+        None,
+    )
+    tracks = [
+        {
+            "key": direction,
+            "flight_direction": direction,
+            "velocity_mm_year": rec.get("los_velocity_mm_year"),
+            "uncertainty_mm_year": rec.get("uncertainty_mm_year"),
+            "lv_theta_rad": rec.get("lv_theta_rad"),
+            "lv_phi_rad": rec.get("lv_phi_rad"),
+            "t_start_utc": rec.get("t_start_utc"),
+            "t_end_utc": rec.get("t_end_utc"),
+        }
+        for direction, rec in sorted(records.items())
+    ]
+    combined = insar_combine.combine_tracks(tracks, slope_deg, aspect_deg)
+
+    # The East/Up decomposition needs only the two look vectors and the two LOS rates -
+    # no slope, no aspect. combine_tracks skips it when the downslope direction is
+    # unknown, but that throws away a capability that is still available: separating
+    # vertical from horizontal motion, which no single track can do at any slope. This is
+    # the normal case for a site whose aspect has not been resolved from the DEM yet.
+    if combined.get("east_up") is None and len(tracks) == 2:
+        by_direction = {t["flight_direction"]: t for t in tracks}
+        asc, desc = by_direction.get("ASCENDING"), by_direction.get("DESCENDING")
+        if asc and desc:
+            try:
+                combined["east_up"] = insar_combine.decompose_east_up(asc, desc)
+                combined.setdefault("warnings", []).append(
+                    "east/up decomposed without a slope model; the downslope rate was "
+                    "withheld because slope/aspect were unavailable"
+                )
+            except Exception as exc:
+                logger.debug("east/up decomposition unavailable: %s", exc)
+
+    result["combination"] = combined
+    east_up = combined.get("east_up") or {}
+    if east_up and not east_up.get("refused"):
+        result["east_velocity_mm_year"] = east_up.get("east_mm_year")
+        result["up_velocity_mm_year"] = east_up.get("up_mm_year")
+        result["east_up_assumes_no_north_motion"] = True
+
+    if combined.get("status") == "OK" and combined.get("velocity_mm_year") is not None:
+        # A combined downslope rate supersedes the single-track projection: it uses both
+        # geometries and carries an uncertainty that has been honestly inflated when the
+        # two tracks disagree.
+        result["slope_parallel_velocity_mm_year"] = combined["velocity_mm_year"]
+        result["slope_parallel_reliable"] = True
+        result["slope_parallel_note"] = combined.get("summary")
+        result["combined_uncertainty_mm_year"] = combined.get("uncertainty_mm_year")
+        # The combination's uncertainty is the one that has been honestly inflated when
+        # the two tracks disagree. If it does not travel with the velocity it describes,
+        # the Birge inflation is computed and then ignored, and "TRACKS DISAGREE" changes
+        # nothing about what the physics engine is told.
+        result["slope_parallel_uncertainty_mm_year"] = combined.get("uncertainty_mm_year")
+        result["combination_consistent"] = combined.get("consistent")
+        result["source"] = (
+            f"ASF HyP3 Sentinel-1 burst InSAR, SBAS time-series inversion, "
+            f"{'+'.join(sorted(records))} combined"
+        )
     return result
 
 
@@ -1133,18 +1610,29 @@ def load_measured_velocities(force: bool = False) -> Dict[str, Dict[str, Any]]:
 
     values: Dict[str, Dict[str, Any]] = {}
     state = hyp3._load_state()
+    # Keyed by the BARE site key, because that is what the physics loop looks up. The
+    # state file is keyed per geometry, so collapse to one record per site first -
+    # otherwise a site with both an ascending and a descending network would be visited
+    # twice and stored under keys no caller ever asks for.
+    sites: Dict[str, Tuple[float, float]] = {}
     for key, net in (state.get("networks") or {}).items():
         if not net.get("solution"):
             continue
         try:
-            record = timeseries_velocity_provider(
-                float(net["lat"]), float(net["lon"]), allow_network=False
-            )
+            lat, lon = float(net["lat"]), float(net["lon"])
+        except (KeyError, TypeError, ValueError):
+            logger.warning("InSAR network %s has no usable coordinate; skipped", key)
+            continue
+        sites[hyp3.site_key(lat, lon)] = (lat, lon)
+
+    for site, (lat, lon) in sites.items():
+        try:
+            record = combined_velocity_for_site(lat, lon, allow_network=False)
         except Exception as exc:  # one bad network must not blind the whole loop
-            logger.warning("measured velocity unavailable for %s: %s", key, exc)
+            logger.warning("measured velocity unavailable for %s: %s", site, exc)
             continue
         if record:
-            values[key] = record
+            values[site] = record
     _VELOCITY_CACHE["mtime"] = mtime
     _VELOCITY_CACHE["values"] = values
     return values
@@ -1199,13 +1687,22 @@ def resolve_creep_input(
     if measured.get("slope_parallel_reliable") and measured.get("slope_parallel_velocity_mm_year") is not None:
         v_year = float(measured["slope_parallel_velocity_mm_year"])
         geometry = "slope-parallel"
+        # Must be the SLOPE-PARALLEL sigma, not the line-of-sight one. They are different
+        # physical quantities and the whole MEASURED-vs-PROXY decision below is a
+        # comparison between a velocity and its own uncertainty.
+        sigma = measured.get("slope_parallel_uncertainty_mm_year")
+        if sigma is None:
+            out["reason"] = (
+                "slope-parallel velocity offered without a matching slope-parallel "
+                "uncertainty; refusing to pair it with the line-of-sight sigma"
+            )
+            return out
     elif measured.get("los_velocity_mm_year") is not None:
         v_year = float(measured["los_velocity_mm_year"])
         geometry = "line-of-sight"
+        sigma = measured.get("uncertainty_mm_year")
     else:
         return out
-
-    sigma = measured.get("uncertainty_mm_year")
     if sigma is None:
         return out
     sigma = float(sigma)

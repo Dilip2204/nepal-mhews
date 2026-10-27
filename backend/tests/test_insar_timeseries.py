@@ -463,10 +463,11 @@ def test_collect_network_flags_an_unstable_reference(tmp_path, monkeypatch):
                 ),
             },
         })
-    key = hyp3.site_key(1.0, 2.0)
+    key = ts.network_key(1.0, 2.0, "ASCENDING")
     state = {"version": 1, "networks": {
         key: {"site_id": "s1", "lat": 1.0, "lon": 2.0, "burst_id": "b", "swath": "IW1",
-              "polarization": "VV", "pairs": pairs, "solution": None}
+              "polarization": "VV", "flight_direction": "ASCENDING",
+              "pairs": pairs, "solution": None}
     }}
     hyp3._save_state(state)
     monkeypatch.setattr(hyp3, "get_job", lambda jid: None)  # pairs already SUCCEEDED+observed
@@ -498,10 +499,11 @@ def test_collect_network_passes_a_stable_reference(tmp_path, monkeypatch):
                 "ref_vs_outer_displacement_mm": o["displacement_mm"] * 0.1,  # ~noise, no real drift
             },
         })
-    key = hyp3.site_key(1.0, 2.0)
+    key = ts.network_key(1.0, 2.0, "ASCENDING")
     state = {"version": 1, "networks": {
         key: {"site_id": "s1", "lat": 1.0, "lon": 2.0, "burst_id": "b", "swath": "IW1",
-              "polarization": "VV", "pairs": pairs, "solution": None}
+              "polarization": "VV", "flight_direction": "ASCENDING",
+              "pairs": pairs, "solution": None}
     }}
     hyp3._save_state(state)
     monkeypatch.setattr(hyp3, "get_job", lambda jid: None)
@@ -636,10 +638,27 @@ def test_slope_parallel_rate_is_preferred_over_raw_los():
         8.0,
         _measured(120.0, 5.0,
                   slope_parallel_reliable=True,
-                  slope_parallel_velocity_mm_year=240.0),
+                  slope_parallel_velocity_mm_year=240.0,
+                  slope_parallel_uncertainty_mm_year=10.0),
     )
     assert out["geometry"] == "slope-parallel"
     assert out["value_mm_month"] == pytest.approx(20.0)
+    # the sigma used must be the slope-parallel one, not the line-of-sight 5.0
+    assert out["uncertainty_mm_year"] == 10.0
+
+
+def test_a_downslope_velocity_without_a_downslope_sigma_is_refused():
+    """Pairing a slope-parallel rate with the raw LOS sigma understates the error by
+    1/|s| - up to 6x at the sensitivity gate - and that ratio is exactly what decides
+    MEASURED vs PROXY. Refuse rather than mix the two quantities."""
+    out = ts.resolve_creep_input(
+        8.0,
+        _measured(120.0, 5.0,
+                  slope_parallel_reliable=True,
+                  slope_parallel_velocity_mm_year=240.0),   # no matching sigma
+    )
+    assert out["provenance"] == "MODELLED_PROXY"
+    assert "without a matching slope-parallel uncertainty" in out["reason"]
 
 
 def test_unreliable_slope_parallel_projection_falls_back_to_los():
@@ -704,3 +723,450 @@ def test_load_measured_velocities_caches_against_state_mtime(tmp_path, monkeypat
     ts.load_measured_velocities()
     ts.load_measured_velocities()
     assert calls["n"] == 1
+
+
+# ------------------------------------------------------------------ direction-scoped keys
+def test_network_key_is_scoped_by_flight_direction():
+    asc = ts.network_key(29.5023, 82.2504, "ASCENDING")
+    desc = ts.network_key(29.5023, 82.2504, "DESCENDING")
+    assert asc != desc
+    assert asc.startswith(hyp3.site_key(29.5023, 82.2504))
+    assert ts.split_network_key(asc) == (hyp3.site_key(29.5023, 82.2504), "ASCENDING")
+
+
+def test_network_key_normalises_case_and_missing_direction():
+    assert ts.network_key(1.0, 2.0, "ascending") == ts.network_key(1.0, 2.0, "ASCENDING")
+    assert ts.split_network_key(ts.network_key(1.0, 2.0, ""))[1] == ts.DIRECTION_UNKNOWN
+
+
+def test_a_bare_legacy_key_still_parses():
+    """Keys written before direction scoping have no separator at all."""
+    assert ts.split_network_key("29.5023,82.2504") == ("29.5023,82.2504", "UNKNOWN")
+
+
+def test_legacy_migration_preserves_the_solved_network():
+    """The production state file holds one solved network under a bare key. Losing it
+    would throw away 90 spent HyP3 credits and the only measured velocity in the system."""
+    solution = {"velocity_mm_year": -0.31, "velocity_stderr_mm_year": 6.71, "n_pairs": 39}
+    state = {"version": hyp3.STATE_VERSION, "networks": {
+        "29.5023,82.2504": {"lat": 29.5023, "lon": 82.2504, "site_id": "glc_105",
+                            "pairs": [{"job_id": "a"}], "solution": solution},
+    }}
+    assert ts.migrate_legacy_network_keys(state) == 1
+    assert list(state["networks"]) == ["29.5023,82.2504@UNKNOWN"]
+    migrated = state["networks"]["29.5023,82.2504@UNKNOWN"]
+    assert migrated["solution"] == solution
+    assert migrated["flight_direction"] == "UNKNOWN"
+
+
+def test_legacy_migration_is_idempotent():
+    state = {"version": hyp3.STATE_VERSION, "networks": {
+        "1.0000,2.0000": {"lat": 1.0, "lon": 2.0, "solution": {"velocity_mm_year": 1.0}},
+    }}
+    assert ts.migrate_legacy_network_keys(state) == 1
+    assert ts.migrate_legacy_network_keys(state) == 0
+    assert ts.migrate_legacy_network_keys(state) == 0
+    assert len(state["networks"]) == 1
+
+
+def test_migration_never_guesses_a_direction():
+    """A guessed direction would silently corrupt the asc/desc combination. The legacy
+    record has nothing to infer from, so it must say UNKNOWN."""
+    state = {"version": hyp3.STATE_VERSION, "networks": {
+        "1.0000,2.0000": {"lat": 1.0, "lon": 2.0, "burst_id": "337397", "swath": "IW1"},
+    }}
+    ts.migrate_legacy_network_keys(state)
+    assert state["networks"]["1.0000,2.0000@UNKNOWN"]["flight_direction"] == "UNKNOWN"
+
+
+def test_migration_keeps_a_solved_network_over_an_unsolved_collision():
+    state = {"version": hyp3.STATE_VERSION, "networks": {
+        "1.0000,2.0000@UNKNOWN": {"lat": 1.0, "lon": 2.0, "solution": {"velocity_mm_year": 5.0}},
+        "1.0000,2.0000": {"lat": 1.0, "lon": 2.0, "solution": None},
+    }}
+    ts.migrate_legacy_network_keys(state)
+    kept = state["networks"]["1.0000,2.0000@UNKNOWN"]
+    assert kept["solution"] == {"velocity_mm_year": 5.0}
+
+
+def test_networks_for_site_returns_every_direction():
+    state = {"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(29.5, 82.25, "ASCENDING"): {"lat": 29.5, "lon": 82.25, "solution": {}},
+        ts.network_key(29.5, 82.25, "DESCENDING"): {"lat": 29.5, "lon": 82.25, "solution": {}},
+        ts.network_key(28.0, 85.0, "ASCENDING"): {"lat": 28.0, "lon": 85.0},
+    }}
+    found = ts.networks_for_site(state, 29.5, 82.25)
+    assert set(found) == {"ASCENDING", "DESCENDING"}
+    assert set(ts.networks_for_site(state, 28.0, 85.0)) == {"ASCENDING"}
+    assert ts.networks_for_site(state, 1.0, 1.0) == {}
+
+
+def test_networks_for_site_does_not_match_a_different_site_by_prefix():
+    """site_key is a fixed 4-dp format, but guard the prefix match anyway."""
+    state = {"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(29.5, 82.25, "ASCENDING"): {"lat": 29.5, "lon": 82.25},
+    }}
+    assert ts.networks_for_site(state, 29.5, 82.2) == {}
+
+
+def test_collect_network_migrates_a_legacy_key_in_place(tmp_path, monkeypatch):
+    """A production state file written before direction scoping must still collect."""
+    monkeypatch.setattr(hyp3, "STATE_PATH", tmp_path / "state.json")
+    monkeypatch.setattr(ts.settings, "hyp3_enabled", True, raising=False)
+    monkeypatch.setattr(hyp3, "_auth_headers", lambda: {"Authorization": "x"})
+    hyp3._save_state({"version": hyp3.STATE_VERSION, "networks": {
+        "1.0000,2.0000": {"site_id": "s1", "lat": 1.0, "lon": 2.0, "pairs": [],
+                          "solution": None},
+    }})
+    res = ts.collect_network(1.0, 2.0)
+    assert res["status"] != "NO_NETWORK"          # the legacy network was found
+    assert "1.0000,2.0000@UNKNOWN" in hyp3._load_state()["networks"]
+
+
+def test_collect_network_refuses_to_guess_between_two_geometries(tmp_path, monkeypatch):
+    """With both directions recorded, 'the' network is no longer a well-defined request."""
+    monkeypatch.setattr(hyp3, "STATE_PATH", tmp_path / "state.json")
+    monkeypatch.setattr(ts.settings, "hyp3_enabled", True, raising=False)
+    monkeypatch.setattr(hyp3, "_auth_headers", lambda: {"Authorization": "x"})
+    hyp3._save_state({"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(1.0, 2.0, "ASCENDING"): {"lat": 1.0, "lon": 2.0, "pairs": []},
+        ts.network_key(1.0, 2.0, "DESCENDING"): {"lat": 1.0, "lon": 2.0, "pairs": []},
+    }})
+    res = ts.collect_network(1.0, 2.0)
+    assert res["status"] == "AMBIGUOUS_DIRECTION"
+    assert res["available_directions"] == ["ASCENDING", "DESCENDING"]
+    # naming one resolves it
+    assert ts.collect_network(1.0, 2.0, "DESCENDING")["status"] != "AMBIGUOUS_DIRECTION"
+
+
+def _solved_net(lat, lon, stderr, direction="ASCENDING", v=12.0):
+    return {"lat": lat, "lon": lon, "burst_id": "b", "swath": "IW1", "polarization": "VV",
+            "flight_direction": direction, "pairs": [], "solved_utc": time.time(),
+            "solution": {"velocity_mm_month": v / 12.0, "velocity_mm_year": v,
+                         "velocity_stderr_mm_year": stderr, "n_pairs": 30, "n_epochs": 12,
+                         "span_days": 300.0, "residual_rms_mm": 3.0, "redundancy": 2.5}}
+
+
+def test_a_migrated_network_is_still_found_by_the_provider(tmp_path, monkeypatch):
+    """The regression that would have fired on the next Sunday cron: once collect_network
+    migrates the key, a bare-site_key lookup returns nothing and the only measured
+    velocity in the system silently reverts to MODELLED_PROXY."""
+    path = tmp_path / "state.json"
+    state = {"version": hyp3.STATE_VERSION,
+             "networks": {"29.5023,82.2504": _solved_net(29.5023, 82.2504, 6.71)}}
+    ts.migrate_legacy_network_keys(state)
+    assert list(state["networks"]) == ["29.5023,82.2504@ASCENDING"]
+    path.write_text(json.dumps(state))
+    monkeypatch.setattr(hyp3, "STATE_PATH", path)
+    monkeypatch.setattr(ts.settings, "hyp3_enabled", True, raising=False)
+    monkeypatch.setattr(ts, "estimate_aspect_deg", lambda *a, **k: None)
+    ts._VELOCITY_CACHE["mtime"] = None
+
+    assert ts.timeseries_velocity_provider(29.5023, 82.2504, allow_network=False) is not None
+    assert set(ts.load_measured_velocities(force=True)) == {hyp3.site_key(29.5023, 82.2504)}
+
+
+def test_an_unmigrated_legacy_state_still_resolves(tmp_path, monkeypatch):
+    """Belt and braces: the on-disk file may not have been migrated yet."""
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"version": hyp3.STATE_VERSION,
+                                "networks": {"29.5023,82.2504": _solved_net(29.5023, 82.2504, 6.71)}}))
+    monkeypatch.setattr(hyp3, "STATE_PATH", path)
+    monkeypatch.setattr(ts.settings, "hyp3_enabled", True, raising=False)
+    monkeypatch.setattr(ts, "estimate_aspect_deg", lambda *a, **k: None)
+    ts._VELOCITY_CACHE["mtime"] = None
+    assert ts.timeseries_velocity_provider(29.5023, 82.2504, allow_network=False) is not None
+
+
+def test_load_measured_velocities_keys_by_bare_site_not_by_direction(tmp_path, monkeypatch):
+    """The physics loop looks sites up by hyp3.site_key. A direction-scoped key here
+    would miss every one of them."""
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(28.0, 85.0, "ASCENDING"): _solved_net(28.0, 85.0, 4.0, "ASCENDING"),
+        ts.network_key(28.0, 85.0, "DESCENDING"): _solved_net(28.0, 85.0, 3.0, "DESCENDING"),
+    }}))
+    monkeypatch.setattr(hyp3, "STATE_PATH", path)
+    monkeypatch.setattr(ts.settings, "hyp3_enabled", True, raising=False)
+    monkeypatch.setattr(ts, "estimate_aspect_deg", lambda *a, **k: None)
+    ts._VELOCITY_CACHE["mtime"] = None
+
+    values = ts.load_measured_velocities(force=True)
+    # ONE record for the site, not one per geometry
+    assert set(values) == {hyp3.site_key(28.0, 85.0)}
+
+
+def test_the_provider_picks_the_tightest_geometry_when_not_told_which(tmp_path, monkeypatch):
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(28.0, 85.0, "ASCENDING"): _solved_net(28.0, 85.0, 9.0, "ASCENDING"),
+        ts.network_key(28.0, 85.0, "DESCENDING"): _solved_net(28.0, 85.0, 2.0, "DESCENDING"),
+    }}))
+    monkeypatch.setattr(hyp3, "STATE_PATH", path)
+    monkeypatch.setattr(ts.settings, "hyp3_enabled", True, raising=False)
+    monkeypatch.setattr(ts, "estimate_aspect_deg", lambda *a, **k: None)
+
+    best = ts.timeseries_velocity_provider(28.0, 85.0, allow_network=False)
+    assert best["flight_direction"] == "DESCENDING"
+    assert best["uncertainty_mm_year"] == 2.0
+    asc = ts.timeseries_velocity_provider(28.0, 85.0, allow_network=False, direction="ASCENDING")
+    assert asc["flight_direction"] == "ASCENDING"
+    assert ts.timeseries_velocity_provider(
+        28.0, 85.0, allow_network=False, direction="NONSENSE") is None
+
+
+# ------------------------------------------------------------------ asc + desc end to end
+# Look vectors MEASURED from real HyP3 products (64 local products carrying lv_phi/lv_theta;
+# 63 ascending at glc_105 burst 337397/IW1, one descending at 039571/IW1). Not assumed.
+# 30 degrees off north. At exactly 0/180 the two look vectors respond identically to
+# vertical motion, so the consistency test has no power and correctly reports None rather
+# than True - pinned separately by test_a_blind_geometry_reports_untested_not_agreed.
+_ASPECT = 30.0
+
+MEASURED_ASC = {"lv_theta_rad": 0.9696, "lv_phi_rad": -2.9541}
+MEASURED_DESC = {"lv_theta_rad": 0.9719, "lv_phi_rad": -0.1883}
+
+
+def _geom_net(lat, lon, direction, v, stderr, lv, span_days=300.0):
+    now = time.time()
+    obs = {"displacement_mm": 1.0, "lv_theta_rad": lv["lv_theta_rad"],
+           "lv_phi_rad": lv["lv_phi_rad"]}
+    return {"lat": lat, "lon": lon, "burst_id": "b", "swath": "IW1", "polarization": "VV",
+            "flight_direction": direction, "slope_deg": 35.0, "aspect_deg": _ASPECT,
+            "solved_utc": now,
+            "pairs": [{"job_id": "j1", "status": "SUCCEEDED", "observation": obs}],
+            "solution": {"velocity_mm_month": v / 12.0, "velocity_mm_year": v,
+                         "velocity_stderr_mm_year": stderr, "n_pairs": 30, "n_epochs": 12,
+                         "span_days": span_days, "residual_rms_mm": 3.0, "redundancy": 2.5}}
+
+
+def _two_geometry_state(v_asc, v_desc, s_asc=6.0, s_desc=6.0):
+    return {"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(29.5, 82.25, "ASCENDING"):
+            _geom_net(29.5, 82.25, "ASCENDING", v_asc, s_asc, MEASURED_ASC),
+        ts.network_key(29.5, 82.25, "DESCENDING"):
+            _geom_net(29.5, 82.25, "DESCENDING", v_desc, s_desc, MEASURED_DESC),
+    }}
+
+
+def _install(state, tmp_path, monkeypatch):
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps(state))
+    monkeypatch.setattr(hyp3, "STATE_PATH", path)
+    monkeypatch.setattr(ts.settings, "hyp3_enabled", True, raising=False)
+    monkeypatch.setattr(ts, "estimate_aspect_deg", lambda *a, **k: None)
+    ts._VELOCITY_CACHE["mtime"] = None
+
+
+def test_two_geometries_combine_into_one_record(tmp_path, monkeypatch):
+    from app.ingestion import insar_combine
+    truth = 30.0
+    s_a = insar_combine.projection_sensitivity(
+        MEASURED_ASC["lv_theta_rad"], MEASURED_ASC["lv_phi_rad"], 35.0, _ASPECT)
+    s_d = insar_combine.projection_sensitivity(
+        MEASURED_DESC["lv_theta_rad"], MEASURED_DESC["lv_phi_rad"], 35.0, _ASPECT)
+    _install(_two_geometry_state(s_a * truth, s_d * truth), tmp_path, monkeypatch)
+
+    rec = ts.combined_velocity_for_site(29.5, 82.25)
+    assert rec is not None
+    assert rec["geometries_available"] == ["ASCENDING", "DESCENDING"]
+    assert rec["combination"]["status"] == "OK"
+    assert rec["combination"]["n_tracks_used"] == 2
+    # the combined downslope rate recovers the truth both tracks were built from
+    assert rec["slope_parallel_velocity_mm_year"] == pytest.approx(truth, abs=0.5)
+    assert rec["combination_consistent"] is True
+    assert "ASCENDING+DESCENDING" in rec["source"]
+
+
+def test_combining_is_tighter_than_either_track_alone(tmp_path, monkeypatch):
+    """The precision half of the claim, at an aspect where both tracks see the slope."""
+    from app.ingestion import insar_combine
+    truth, sigma = 30.0, 6.0
+    s_a = insar_combine.projection_sensitivity(
+        MEASURED_ASC["lv_theta_rad"], MEASURED_ASC["lv_phi_rad"], 35.0, _ASPECT)
+    s_d = insar_combine.projection_sensitivity(
+        MEASURED_DESC["lv_theta_rad"], MEASURED_DESC["lv_phi_rad"], 35.0, _ASPECT)
+    _install(_two_geometry_state(s_a * truth, s_d * truth, sigma, sigma),
+             tmp_path, monkeypatch)
+
+    combined = ts.combined_velocity_for_site(29.5, 82.25)["combination"]
+    best_single = min(sigma / abs(s_a), sigma / abs(s_d))
+    assert combined["uncertainty_mm_year"] < best_single
+    improvement = best_single / combined["uncertainty_mm_year"]
+    assert 1.0 < improvement <= math.sqrt(2) + 1e-6
+
+
+def test_disagreeing_geometries_do_not_report_a_tight_number(tmp_path, monkeypatch):
+    """The honesty half. Two tracks that cannot both come from one downslope rate must
+    degrade the uncertainty, not keep the tight combined value."""
+    _install(_two_geometry_state(+40.0, -40.0, 1.0, 1.0), tmp_path, monkeypatch)
+    combined = ts.combined_velocity_for_site(29.5, 82.25)["combination"]
+    assert combined["consistent"] is False
+    sp = combined["slope_parallel"]
+    assert sp["uncertainty_mm_year"] > sp["formal_uncertainty_mm_year"]
+
+
+def test_a_single_geometry_site_is_unchanged_by_the_combination_path(tmp_path, monkeypatch):
+    """The common case today: one network, no combination, same record as before."""
+    state = {"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(29.5, 82.25, "ASCENDING"):
+            _geom_net(29.5, 82.25, "ASCENDING", 12.0, 4.0, MEASURED_ASC)}}
+    _install(state, tmp_path, monkeypatch)
+    rec = ts.combined_velocity_for_site(29.5, 82.25)
+    assert rec["geometries_available"] == ["ASCENDING"]
+    assert "combination" not in rec
+    assert rec["los_velocity_mm_year"] == 12.0
+
+
+def test_the_hot_path_serves_the_combined_record(tmp_path, monkeypatch):
+    from app.ingestion import insar_combine
+    s_a = insar_combine.projection_sensitivity(
+        MEASURED_ASC["lv_theta_rad"], MEASURED_ASC["lv_phi_rad"], 35.0, _ASPECT)
+    s_d = insar_combine.projection_sensitivity(
+        MEASURED_DESC["lv_theta_rad"], MEASURED_DESC["lv_phi_rad"], 35.0, _ASPECT)
+    _install(_two_geometry_state(s_a * 30.0, s_d * 30.0), tmp_path, monkeypatch)
+    values = ts.load_measured_velocities(force=True)
+    assert set(values) == {hyp3.site_key(29.5, 82.25)}
+    assert values[hyp3.site_key(29.5, 82.25)]["combination"]["n_tracks_used"] == 2
+
+
+def test_the_measured_look_vectors_classify_to_the_right_directions():
+    """Guards the sign convention the whole decomposition rests on, using the values
+    measured from real products rather than the ones derived from orbital geometry."""
+    from app.ingestion import insar_combine
+    assert insar_combine.classify_flight_direction(MEASURED_ASC["lv_phi_rad"]) == "ASCENDING"
+    assert insar_combine.classify_flight_direction(MEASURED_DESC["lv_phi_rad"]) == "DESCENDING"
+    assert math.cos(MEASURED_ASC["lv_phi_rad"]) < 0    # looks West -> ascending
+    assert math.cos(MEASURED_DESC["lv_phi_rad"]) > 0   # looks East -> descending
+
+
+# ------------------------------------------------------------------ direction backfill
+def test_backfill_resolves_an_unknown_network_and_rekeys_it(monkeypatch):
+    """An UNKNOWN network can never be combined - its geometry is the thing a combination
+    needs. The burst id was stored, and CMR maps it to one authoritative direction."""
+    monkeypatch.setattr(hyp3, "burst_direction", lambda *a, **k: "ASCENDING")
+    solution = {"velocity_mm_year": -0.31, "velocity_stderr_mm_year": 6.71}
+    state = {"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(29.5023, 82.2504, "UNKNOWN"): {
+            "lat": 29.5023, "lon": 82.2504, "burst_id": "337397", "swath": "IW1",
+            "polarization": "VV", "flight_direction": "UNKNOWN",
+            "pairs": [{"job_id": "a"}], "solution": solution},
+    }}
+    assert ts.backfill_network_direction(state, 29.5023, 82.2504) == "ASCENDING"
+    assert list(state["networks"]) == ["29.5023,82.2504@ASCENDING"]
+    net = state["networks"]["29.5023,82.2504@ASCENDING"]
+    assert net["flight_direction"] == "ASCENDING"
+    assert net["solution"] == solution and len(net["pairs"]) == 1
+
+
+def test_backfill_leaves_the_network_alone_when_cmr_cannot_say(monkeypatch):
+    monkeypatch.setattr(hyp3, "burst_direction", lambda *a, **k: "UNKNOWN")
+    state = {"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(1.0, 2.0, "UNKNOWN"): {"lat": 1.0, "lon": 2.0, "burst_id": "b",
+                                              "swath": "IW1", "polarization": "VV"},
+    }}
+    assert ts.backfill_network_direction(state, 1.0, 2.0) is None
+    assert list(state["networks"]) == ["1.0000,2.0000@UNKNOWN"]
+
+
+def test_backfill_refuses_to_merge_onto_an_occupied_direction(monkeypatch):
+    """Two networks built from different stacks must not be silently merged."""
+    monkeypatch.setattr(hyp3, "burst_direction", lambda *a, **k: "ASCENDING")
+    state = {"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(1.0, 2.0, "UNKNOWN"): {"lat": 1.0, "lon": 2.0, "burst_id": "b1",
+                                              "swath": "IW1", "polarization": "VV"},
+        ts.network_key(1.0, 2.0, "ASCENDING"): {"lat": 1.0, "lon": 2.0, "burst_id": "b2",
+                                                "swath": "IW2", "polarization": "VV",
+                                                "solution": {"velocity_mm_year": 3.0}},
+    }}
+    assert ts.backfill_network_direction(state, 1.0, 2.0) is None
+    assert state["networks"][ts.network_key(1.0, 2.0, "ASCENDING")]["burst_id"] == "b2"
+    assert ts.network_key(1.0, 2.0, "UNKNOWN") in state["networks"]
+
+
+def test_backfill_needs_a_burst_id(monkeypatch):
+    def _boom(*a, **k):
+        raise AssertionError("CMR queried with no burst id to query for")
+
+    monkeypatch.setattr(hyp3, "burst_direction", _boom)
+    state = {"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(1.0, 2.0, "UNKNOWN"): {"lat": 1.0, "lon": 2.0},
+    }}
+    assert ts.backfill_network_direction(state, 1.0, 2.0) is None
+
+
+def test_backfill_is_not_reachable_from_the_hot_path(tmp_path, monkeypatch):
+    """The 30-minute loop must never make a network call. Backfill is a weekly-path
+    operation; if load_measured_velocities could reach it, the loop would depend on CMR."""
+    def _boom(*a, **k):
+        raise AssertionError("burst_direction reached from the hot path")
+
+    monkeypatch.setattr(hyp3, "burst_direction", _boom)
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(29.5, 82.25, "UNKNOWN"): _solved_net(29.5, 82.25, 6.0, "UNKNOWN"),
+    }}))
+    monkeypatch.setattr(hyp3, "STATE_PATH", path)
+    monkeypatch.setattr(ts.settings, "hyp3_enabled", True, raising=False)
+    monkeypatch.setattr(ts, "estimate_aspect_deg", lambda *a, **k: None)
+    ts._VELOCITY_CACHE["mtime"] = None
+    assert ts.load_measured_velocities(force=True)      # still serves the velocity
+
+
+def test_east_up_is_still_recovered_when_the_aspect_is_unknown(tmp_path, monkeypatch):
+    """Separating vertical from horizontal motion needs only the two look vectors - no
+    slope, no aspect. Withholding it when the aspect is unresolved would discard the one
+    thing no single track can do, in exactly the case that is normal today."""
+    _install(_two_geometry_state(-12.0, +8.0, 3.0, 3.0), tmp_path, monkeypatch)
+    # same state, but with the aspect genuinely unknown
+    state = json.loads((tmp_path / "state.json").read_text())
+    for net in state["networks"].values():
+        net.pop("aspect_deg", None)
+    (tmp_path / "state.json").write_text(json.dumps(state))
+    ts._VELOCITY_CACHE["mtime"] = None
+
+    rec = ts.combined_velocity_for_site(29.5, 82.25)
+    assert rec["combination"]["status"] == "NO_SLOPE_GEOMETRY"   # downslope withheld
+    # no downslope rate is offered at all, because the downslope direction is unknown
+    assert rec.get("slope_parallel_velocity_mm_year") is None
+    # but the decomposition that needs no slope model still runs
+    assert rec["east_velocity_mm_year"] is not None
+    assert rec["up_velocity_mm_year"] is not None
+    # the assumption that makes it possible must always be stated
+    assert rec["east_up_assumes_no_north_motion"] is True
+
+
+def test_east_up_is_not_claimed_from_two_same_direction_tracks(tmp_path, monkeypatch):
+    """Two ascending tracks are not an asc/desc pair; decomposing them would amplify
+    noise into a confident-looking number."""
+    state = {"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(29.5, 82.25, "ASCENDING"):
+            _geom_net(29.5, 82.25, "ASCENDING", -12.0, 3.0, MEASURED_ASC),
+        ts.network_key(29.5, 82.25, "UNKNOWN"):
+            _geom_net(29.5, 82.25, "UNKNOWN", -11.0, 3.0, MEASURED_ASC),
+    }}
+    _install(state, tmp_path, monkeypatch)
+    rec = ts.combined_velocity_for_site(29.5, 82.25)
+    eu = (rec.get("combination") or {}).get("east_up")
+    assert rec.get("east_velocity_mm_year") is None
+    assert eu is None or eu.get("refused") is True
+
+
+def test_a_blind_geometry_reports_untested_not_agreed(tmp_path, monkeypatch):
+    """End-to-end guard on the worst failure the review found: on a due-north slope the
+    two geometries respond identically to vertical motion, so pure subsidence came back
+    as a multi-sigma downslope creep rate labelled "tracks agree"."""
+    from app.ingestion import insar_combine
+    state = _two_geometry_state(-5.5, +5.5)
+    for net in state["networks"].values():
+        net["aspect_deg"] = 0.0           # due north: the blind spot
+    _install(state, tmp_path, monkeypatch)
+
+    rec = ts.combined_velocity_for_site(29.5, 82.25)
+    combo = rec["combination"]
+    assert combo["consistent"] is None            # never True
+    sp = combo["slope_parallel"]
+    assert sp["vertical_blind_spot"]["blind_to_vertical"] is True
+    assert "UNTESTABLE" in combo["summary"]
+    # and the uncertainty that travels with the velocity is the combination's own
+    assert rec["slope_parallel_uncertainty_mm_year"] == combo["uncertainty_mm_year"]

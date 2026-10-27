@@ -167,6 +167,43 @@ Same data. One pair is wrong by 4.6×. This is pinned by a test.
 
 ---
 
+---
+
+## 9. Files
+
+| Path | Role |
+|---|---|
+| `backend/app/ingestion/insar_hyp3.py` | CMR burst discovery, HyP3 submit/collect, single-pair measurement |
+| `backend/app/ingestion/insar_timeseries.py` | Network planning, double differencing, SBAS inversion, the registered provider |
+| `backend/app/ingestion/insar_cdse.py` | Scene/pair-formability metadata + the `register_measured_velocity_provider` hook |
+| `backend/scripts/refresh_insar_baselines.py` | CLI: `--network SITE_ID`, `--collect-networks`, `--collect`, `--submit`, `--status`, `--dry-run` |
+| `backend/tests/test_insar_hyp3.py` | 30 tests |
+| `backend/tests/test_insar_timeseries.py` | 23 tests, incl. ground-truth velocity recovery |
+| `backend/data/hyp3_insar_state.json` | Job/network/solution state (survives restarts) |
+| `backend/data/hyp3_products/` | Downloaded interferograms |
+
+Weekly cron (Sun 03:40 UTC): `--collect-networks --collect --submit`.
+
+---
+
+## 10. Open questions / next steps
+
+1. **Run networks on the three RED sites** (`glc_427` 1112 m, `glc_361` 1650 m, `glc_453`
+   2951 m). A *detected* velocity at a RED site would be far more actionable than a null
+   result. Note `glc_427` at 1112 m sits in the 3.5%-usable band — expect it to fail.
+2. **Tighten the uncertainty.** ±6.7 mm/yr is wide, and it is why glc_105 lands in the
+   "precise null" case rather than detecting anything. `--extend-networks` now adds each
+   week's new acquisitions to existing networks, lengthening the span — this is the main
+   lever and it compounds over the six-month run. ERA5 correction would help further.
+3. ~~Use the look vectors to project LOS onto the slope direction.~~ **Done** — see 11.2.
+4. **Decide the fallback policy.** Currently a site with no inverted network reports
+   `UNAVAILABLE` for measured velocity. Alternative: serve the single-pair value explicitly
+   labelled as screening-only. Deliberately not done — it risks re-introducing the exact
+   overclaiming this work removed.
+5. **Watch the credit burn** if networks are run broadly: 90/site against 8000/month.
+
+---
+
 ## 11. What the measurement is wired into (2026-10-26)
 
 Until this date the measured velocity was computed, validated, and then **ignored** — the
@@ -281,35 +318,124 @@ pair and averaged into the solution, so the correction is auditable rather than 
 
 ---
 
-## 9. Files
-
-| Path | Role |
-|---|---|
-| `backend/app/ingestion/insar_hyp3.py` | CMR burst discovery, HyP3 submit/collect, single-pair measurement |
-| `backend/app/ingestion/insar_timeseries.py` | Network planning, double differencing, SBAS inversion, the registered provider |
-| `backend/app/ingestion/insar_cdse.py` | Scene/pair-formability metadata + the `register_measured_velocity_provider` hook |
-| `backend/scripts/refresh_insar_baselines.py` | CLI: `--network SITE_ID`, `--collect-networks`, `--collect`, `--submit`, `--status`, `--dry-run` |
-| `backend/tests/test_insar_hyp3.py` | 30 tests |
-| `backend/tests/test_insar_timeseries.py` | 23 tests, incl. ground-truth velocity recovery |
-| `backend/data/hyp3_insar_state.json` | Job/network/solution state (survives restarts) |
-| `backend/data/hyp3_products/` | Downloaded interferograms |
-
-Weekly cron (Sun 03:40 UTC): `--collect-networks --collect --submit`.
-
 ---
 
-## 10. Open questions / next steps
+## 13. Ascending + descending: what it actually buys (measured 2026-10-26)
 
-1. **Run networks on the three RED sites** (`glc_427` 1112 m, `glc_361` 1650 m, `glc_453`
-   2951 m). A *detected* velocity at a RED site would be far more actionable than a null
-   result. Note `glc_427` at 1112 m sits in the 3.5%-usable band — expect it to fail.
-2. **Tighten the uncertainty.** ±6.7 mm/yr is wide, and it is why glc_105 lands in the
-   "precise null" case rather than detecting anything. `--extend-networks` now adds each
-   week's new acquisitions to existing networks, lengthening the span — this is the main
-   lever and it compounds over the six-month run. ERA5 correction would help further.
-3. ~~Use the look vectors to project LOS onto the slope direction.~~ **Done** — see 11.2.
-4. **Decide the fallback policy.** Currently a site with no inverted network reports
-   `UNAVAILABLE` for measured velocity. Alternative: serve the single-pair value explicitly
-   labelled as screening-only. Deliberately not done — it risks re-introducing the exact
-   overclaiming this work removed.
-5. **Watch the credit burn** if networks are run broadly: 90/site against 8000/month.
+> **This section was wrong twice before it was right.** An earlier draft computed the
+> geometry from an *assumed* 39 degree incidence (real: 34.4), and a later one headlined a
+> coverage benefit that does not exist at the only site with a real network. Both
+> corrections are kept visible below, because assuming the geometry - and then
+> generalising from one slope - were the actual mistakes.
+
+### 13.1 The look vectors, and an attribution that matters
+
+Measured from real HyP3 products with rasterio, not derived from orbital geometry:
+
+| | product | site | measured lv_phi | measured lv_theta | incidence |
+|---|---|---|---|---|---|
+| ASCENDING | 337397/IW1, path 158 | **glc_105** | **-2.9541 rad** | +0.9696 rad | 34.4 deg |
+| DESCENDING | 039571/IW1, path 19 | **Langtang, 320 km away** | **-0.1883 rad** | +0.9719 rad | 34.3 deg |
+
+**The descending row is not glc_105's geometry.** 64 local products carry look vectors; 63
+are the ascending glc_105 burst and the only descending one is a Langtang scene on a
+different path and sub-swath. glc_105's actual descending stack is **196362/IW3**, and IW3
+is the far sub-swath at roughly 40-46 degrees incidence, not 34.3. Every number below that
+uses a descending vector is therefore indicative, not a measurement of glc_105's real
+descending geometry - which cannot be measured until a descending network is processed
+there. The sign convention it verifies (section 13.4) is unaffected: that is a property of
+the product format, not of the site.
+
+### 13.2 The precision gain, and why sqrt(2) is the ceiling
+
+Combined slope-parallel uncertainty is `sigma / sqrt(s_a^2 + s_d^2)` against a
+best-single-track `sigma / max(|s_a|,|s_d|)`, so the improvement is
+`sqrt(1 + r^2)` with `r = min(|s|)/max(|s|)` in [0,1]. It reaches **sqrt(2) = 1.414 only
+when both tracks are equally sensitive**, which happens at exactly aspect 0 and 180.
+
+Over continuous aspect the floor is **1.014x** (near aspect 55, where one track sits just
+above the gate and the other near 1.0). An earlier draft quoted 1.04x; that was an
+artifact of sampling aspect every 30 degrees.
+
+### 13.3 The coverage benefit is real but STRONGLY slope-dependent - and is zero at glc_105
+
+How many of twelve aspects are visible to only ONE geometry (35 deg slope, gate 0.15):
+
+| slope | both usable | single-geometry only |
+|---|---|---|
+| 30 deg | 4 | **8** |
+| 35 deg | 6 | **6** |
+| 40 deg | 8 | **4** |
+| **45.5 deg (glc_105)** | **12** | **0** |
+
+The reason is structural: sensitivity contains a `-sin(slope) * look_Up` term with
+look_Up ~ 0.825, and that term is **aspect-independent**. On a steep slope it dominates,
+both tracks clear the gate at every aspect, and the coverage argument evaporates.
+
+**So at the only site that currently has a network, the coverage benefit is exactly
+zero.** It is a real benefit on moderate slopes (30-35 degrees), which is most of the
+catalog, but it must not be quoted as the headline without the slope attached. With
+glc_105's actual IW3 descending geometry (~43 deg incidence) the count at 45.5 degrees is
+10 both / 2 single - still nearly nothing.
+
+### 13.4 The benefit that does not depend on slope: a testable assumption
+
+With two observations constraining one downslope unknown there is 1 degree of freedom, so
+chi-square can test whether "motion is purely downslope" holds. A single track has zero
+degrees of freedom and can never be shown wrong, which is not the same as being right.
+
+**But the test has a structural blind spot, and it is large.** The difference of the two
+look vectors, `look_asc - look_desc = (-1.110, +0.000, -0.001)`, is almost purely East, so
+all of the test's discriminating power runs along East and scales as
+`|sin(aspect)| * cos(slope)`. At exactly aspect 0 or 180 it is **zero**: a pure vertical
+signal is then indistinguishable from downslope creep. Reproduced - 10 mm/yr of pure
+subsidence on a south-facing 30 degree slope previously came back as:
+
+```
++25.7 +/- 2.2 mm/yr downslope ... tracks AGREE (chi2=0.00 < 3.84)
+```
+
+a 12-sigma creep rate that does not exist. The code now computes
+`min_detectable_vertical_mm_year` for every combination and publishes it next to the
+verdict; when it exceeds 100 mm/yr (the scale the system acts on - the creep trigger fires
+at 10 mm/month = 120 mm/yr) the verdict is downgraded from `True` to `None`, because a
+test with no power has not passed, it has not run. Away from due north/south the limit is
+a useful 10-50 mm/yr.
+
+Note the awkward coincidence: precision peaks at aspect 0/180, which is exactly where the
+consistency test is blind.
+
+### 13.5 East/Up, and why North is unrecoverable
+
+One ascending plus one descending observation decomposes into **East and Up** - motion no
+single track can separate. It needs only the two look vectors, no slope or aspect, so it
+still runs when the aspect is unknown (the normal case today).
+
+`look_North` is **-0.1054 ascending and -0.1055 descending**: identical to four decimals,
+because both passes are near-polar. So `dN = 0` is **forced by the orbit, not chosen for
+convenience**, and is stated on every decomposition. The East/Up 2x2 system is well
+conditioned (determinant -0.916).
+
+### 13.6 Why the sign convention is verified rather than assumed
+
+The HyP3 README ships inside every product (`..._README.md.txt`, section 6). Verbatim:
+
+> "The look vector refers to the look direction back towards the sensor. [...] the angle
+> between the horizontal surface and the look vector with positive angles indicating
+> sensor positions above the surface. [...] the angle between the East direction and the
+> projection of the look vector on the horizontal surface plane. The orientation angle
+> increases towards north."
+
+Two independent confirmations on the measured rasters:
+
+- **Incidence from vertical** `= acos(look_Up)` gives 34.45 deg (asc) / 34.31 deg (desc),
+  squarely in the Sentinel-1 IW1 range. Reading theta as incidence-from-nadir instead
+  would give 55.6 deg, impossible for IW1. This one does discriminate.
+- **Acquisition times**: 119 ascending granules average 18.07 h local solar time, 66
+  descending average 5.94 h, zero overlap - exactly the 18:00-LTAN sun-synchronous orbit,
+  independently confirming the `ASCENDING_DESCENDING` attribute means what we assume.
+
+A third check was removed from this section after review: `|look| = 1.000000` is a
+**tautology**, true of any `(cos t cos p, cos t sin p, sin t)` *and* of the nadir
+parameterisation, so it discriminates between nothing. It had been presented as one of
+three independent confirmations.

@@ -112,6 +112,20 @@ def main() -> int:
         help="poll all submitted networks, double-difference finished pairs, and invert",
     )
     parser.add_argument(
+        "--direction", choices=["ASCENDING", "DESCENDING"], default=None,
+        help="restrict --network to one flight direction",
+    )
+    parser.add_argument(
+        "--both-directions", action="store_true",
+        help="with --network, submit an ascending AND a descending network for the "
+             "site (~2x the credits, 160 at glc_105). The second geometry always buys a "
+             "testable assumption (chi-square on one spare observation) and an East/Up "
+             "split no single track can give. It buys COVERAGE only on moderate slopes: "
+             "six of twelve aspects are single-geometry at 35 degrees, ZERO at 45.5 "
+             "where both tracks clear the gate everywhere. Precision 1.01x-1.41x. "
+             "See INSAR_NOTES.md section 13.",
+    )
+    parser.add_argument(
         "--extend-networks", action="store_true",
         help="add newly available acquisitions to every existing network. Each new epoch "
              "lengthens the observed span, which is what actually tightens the velocity "
@@ -149,10 +163,12 @@ def main() -> int:
         networks = state.get("networks") or {}
         if not networks:
             print("  no networks submitted yet", flush=True)
-        for key, net in networks.items():
-            res = ts.collect_network(net["lat"], net["lon"])
-            print(f"  {net.get('site_id', key)}: measured={res.get('measured')} "
-                  f"pending={res.get('pending')} unusable={res.get('unusable')}", flush=True)
+        for key, net in list(networks.items()):
+            direction = ts.split_network_key(key)[1]
+            res = ts.collect_network(net["lat"], net["lon"], direction)
+            print(f"  {net.get('site_id', key)} [{direction}]: "
+                  f"measured={res.get('measured')} pending={res.get('pending')} "
+                  f"unusable={res.get('unusable')}", flush=True)
             print(f"    {res.get('summary')}", flush=True)
 
     if args.extend_networks:
@@ -162,9 +178,31 @@ def main() -> int:
         if not networks:
             print("  no networks to extend", flush=True)
         for key, net in list(networks.items()):
-            label = net.get("site_id", key)
+            direction = ts.split_network_key(key)[1]
+            label = f"{net.get('site_id', key)} [{direction}]"
+            # Extend on the SAME geometry the network was built from. Planning without a
+            # direction picks the deepest stack regardless, which may be the OTHER track:
+            # submit_network then keys the result by that stack's real direction, finds no
+            # existing record there, and so re-submits every pair as if it were new. On
+            # the production network that is 90 already-paid-for credits spent again.
+            # Resolve the direction first; if it still cannot be established, skip.
+            if direction == ts.DIRECTION_UNKNOWN:
+                state_now = hyp3._load_state()
+                resolved = ts.backfill_network_direction(
+                    state_now, net["lat"], net["lon"]
+                )
+                if resolved:
+                    hyp3._save_state(state_now)
+                    direction = resolved
+                    print(f"  {label}: direction resolved to {resolved}", flush=True)
+                else:
+                    print(f"  {label}: flight direction unknown and not resolvable - "
+                          f"skipped rather than planning blind and re-paying for "
+                          f"existing pairs", flush=True)
+                    continue
+            plan_direction = direction
             if args.dry_run:
-                plan = ts.plan_network(net["lat"], net["lon"])
+                plan = ts.plan_network(net["lat"], net["lon"], direction=plan_direction)
                 if plan is None:
                     print(f"  {label}: no usable burst network", flush=True)
                     continue
@@ -174,7 +212,10 @@ def main() -> int:
                 print(f"  [dry-run] {label}: {len(todo)} new pair(s) would be submitted "
                       f"({len(already)} already in the network)", flush=True)
                 continue
-            res = ts.submit_network(net["lat"], net["lon"], site_id=label)
+            res = ts.submit_network(
+                net["lat"], net["lon"], site_id=net.get("site_id", "site"),
+                direction=plan_direction,
+            )
             print(f"  {label}: {res.get('status')} "
                   f"submitted={res.get('submitted', 0)} "
                   f"total_pairs={res.get('total_pairs', len(net.get('pairs', [])))}", flush=True)
@@ -189,19 +230,40 @@ def main() -> int:
             return 2
         print(f"\n--- SBAS network for {site.site_id} "
               f"({site.latitude:.4f}, {site.longitude:.4f}, {site.elevation_m:.0f} m) ---", flush=True)
-        plan = ts.plan_network(site.latitude, site.longitude)
-        if plan is None:
-            print("  no usable burst network at this location", flush=True)
-            return 1
-        print(f"  planned: {len(plan.pairs)} pairs over {len(plan.epochs)} epochs "
-              f"(redundancy {plan.redundancy:.2f}), burst {plan.burst_id} {plan.swath} "
-              f"{plan.polarization}", flush=True)
-        if args.dry_run:
-            print(f"  [dry-run] would spend {len(plan.pairs)} credits - nothing submitted",
-                  flush=True)
+
+        if args.both_directions:
+            plans = ts.plan_networks(site.latitude, site.longitude)
+            if not plans:
+                print("  no usable burst network at this location", flush=True)
+                return 1
+            if len(plans) < 2:
+                print(f"  [warn] only {sorted(plans)} available here - the asc/desc "
+                      f"combination needs both, so this will stay a single-geometry "
+                      f"measurement", flush=True)
         else:
-            res = ts.submit_network(site.latitude, site.longitude, site_id=site.site_id)
-            print(f"  {res}", flush=True)
+            one = ts.plan_network(site.latitude, site.longitude, direction=args.direction)
+            if one is None:
+                print(f"  no usable burst network at this location"
+                      + (f" on a {args.direction} pass" if args.direction else ""), flush=True)
+                return 1
+            plans = {one.flight_direction: one}
+
+        total_credits = sum(len(p.pairs) for p in plans.values())
+        for direction, plan in sorted(plans.items()):
+            print(f"  [{direction}] planned: {len(plan.pairs)} pairs over "
+                  f"{len(plan.epochs)} epochs (redundancy {plan.redundancy:.2f}), "
+                  f"burst {plan.burst_id} {plan.swath} {plan.polarization}"
+                  + (f", path {plan.path_number}" if plan.path_number else ""), flush=True)
+        if args.dry_run:
+            print(f"  [dry-run] would spend {total_credits} credits across "
+                  f"{len(plans)} network(s) - nothing submitted", flush=True)
+        else:
+            for direction, plan in sorted(plans.items()):
+                res = ts.submit_network(
+                    site.latitude, site.longitude, site_id=site.site_id,
+                    direction=direction,
+                )
+                print(f"  [{direction}] {res}", flush=True)
 
     if args.collect:
         print("\n--- Collect ---", flush=True)

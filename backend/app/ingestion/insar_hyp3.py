@@ -66,7 +66,7 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from app.core.config import settings
 
@@ -120,8 +120,18 @@ def _http_json(
     headers: Optional[Dict[str, str]] = None,
     payload: Optional[Dict[str, Any]] = None,
     timeout: int = HTTP_TIMEOUT_S,
+    headers_out: Optional[Dict[str, str]] = None,
 ) -> Optional[Any]:
-    """GET/POST JSON. Returns None on any failure - callers degrade, never crash."""
+    """GET/POST JSON. Returns None on any failure - callers degrade, never crash.
+
+    `headers_out`, when given, is filled with the RESPONSE headers. CMR reports the true
+    size of a result set only out of band, in `CMR-Hits`, so detecting a truncated burst
+    query needs the headers and not just the body. It is an out-parameter rather than a
+    changed return type so that existing callers - and the tests that stub this function
+    with a plain `lambda *a, **k: payload` - keep working unchanged; a stub that ignores it
+    simply leaves it empty, which the caller must then treat as "total unknown" rather than
+    as "nothing was truncated".
+    """
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     hdrs = dict(headers or {})
     if data is not None:
@@ -129,6 +139,8 @@ def _http_json(
     req = urllib.request.Request(url, data=data, headers=hdrs)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if headers_out is not None:
+                headers_out.update({str(k): str(v) for k, v in resp.headers.items()})
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = ""
@@ -213,16 +225,103 @@ def site_key(lat: float, lon: float) -> str:
 # ---------------------------------------------------------------------------
 # burst discovery (CMR is open - no credentials needed)
 # ---------------------------------------------------------------------------
+# CMR's documented ceiling for page_size. Measured 2026-10-26 (see find_burst_stacks).
+CMR_MAX_PAGE_SIZE = 2000
+
+# Flight direction is only ever one of these, or the honest absence.
+FLIGHT_DIRECTIONS = ("ASCENDING", "DESCENDING")
+DIRECTION_UNKNOWN = "UNKNOWN"
+
+
 @dataclass
 class BurstStack:
     burst_id: str
     swath: str
     polarization: str
     acquisitions: List[Tuple[datetime, str]]  # (time, granule), newest first
+    # "ASCENDING" | "DESCENDING" | "UNKNOWN". Read from the CMR granule attribute
+    # ASCENDING_DESCENDING and NEVER inferred from orbit number, acquisition time or
+    # footprint geometry: ascending/descending combination leans on this to separate two
+    # independent look vectors, and a guessed direction would silently turn one geometry
+    # into two, manufacturing agreement between a measurement and itself.
+    flight_direction: str = DIRECTION_UNKNOWN
+    # Sentinel-1 relative orbit (track). None when it could not be established.
+    path_number: Optional[str] = None
+    # True when discovery stopped at its page limit while CMR was still returning
+    # granules, i.e. `depth` is a lower bound and older acquisitions exist unseen. False
+    # means the result set was read to exhaustion. See find_burst_stacks for why this is
+    # judged structurally rather than from the CMR-Hits header.
+    truncated: bool = False
 
     @property
     def depth(self) -> int:
         return len(self.acquisitions)
+
+
+def _cmr_umm_json_url() -> str:
+    """The configured CMR endpoint, switched to the umm_json response format.
+
+    `granules.json` returns {"feed": {"entry": [...]}} with no AdditionalAttributes at all,
+    so flight direction is not merely missing from our parsing of it - it is absent from
+    the response. `granules.umm_json` returns {"items": [{"umm": ..., "meta": ...}]} and
+    carries ASCENDING_DESCENDING, PATH_NUMBER, BURST_ID_FULL, BURST_ID_RELATIVE and
+    SUBSWATH_NAME per granule. Settings still name the .json endpoint, so rewrite the
+    format suffix here rather than duplicating the host in two places.
+    """
+    base = str(getattr(settings, "cmr_granule_search_url", "") or "").strip()
+    if not base:
+        return "https://cmr.earthdata.nasa.gov/search/granules.umm_json"
+    for suffix in (".umm_json", ".json", ".echo10", ".atom", ".xml", ".native"):
+        if base.endswith(suffix):
+            return base[: -len(suffix)] + ".umm_json"
+    return base.rstrip("/") + ".umm_json"
+
+
+def _umm_attributes(umm: Dict[str, Any]) -> Dict[str, str]:
+    """Flatten UMM-G AdditionalAttributes ([{"Name": .., "Values": [..]}]) to {name: value}.
+
+    Only the first value is kept; every attribute this module reads is single-valued.
+    """
+    attributes: Dict[str, str] = {}
+    for attribute in umm.get("AdditionalAttributes") or []:
+        if not isinstance(attribute, dict):
+            continue
+        name = attribute.get("Name")
+        values = attribute.get("Values") or []
+        if name and values and values[0] is not None:
+            attributes[str(name)] = str(values[0])
+    return attributes
+
+
+def _track_from_burst_id_full(value: Optional[str]) -> Optional[str]:
+    """Track number out of an ESA burst id, '092_196362_IW3' -> '92'.
+
+    BURST_ID_FULL is '<zero-padded track>_<relative burst id>_<swath>'. This is a second
+    authoritative statement of the track, used only to adjudicate a disagreement between
+    PATH_NUMBER values - it is parsing, not inference.
+    """
+    if not value:
+        return None
+    head = str(value).split("_")[0]
+    try:
+        return str(int(head))
+    except ValueError:
+        return None
+
+
+def _only(values: Iterable[Optional[str]]) -> Optional[str]:
+    """The single distinct non-empty value, or None if there are zero or several."""
+    distinct = {v for v in values if v}
+    return distinct.pop() if len(distinct) == 1 else None
+
+
+def _header(headers: Dict[str, str], name: str) -> Optional[str]:
+    """HTTP header lookup; header names are case-insensitive and CMR's casing varies."""
+    lowered = name.lower()
+    for key, value in headers.items():
+        if key.lower() == lowered:
+            return value
+    return None
 
 
 def find_burst_stacks(
@@ -230,14 +329,62 @@ def find_burst_stacks(
     lon: float,
     *,
     half_box_deg: float = 0.025,
-    page_size: int = 200,
+    page_size: int = CMR_MAX_PAGE_SIZE,
+    max_pages: int = 2,
     timeout: int = HTTP_TIMEOUT_S,
 ) -> List[BurstStack]:
     """Find co-polarized Sentinel-1 burst stacks covering a point, newest first.
 
     An interferometric pair must share the same relative burst id, swath and polarization;
     only the acquisition date differs. Cross-pol (VH/HV) is filtered out because the HyP3
-    API rejects it outright.
+    API rejects it outright. Grouping, cross-pol filtering, newest-first acquisition order
+    and deepest-stack-first ordering are unchanged; what is new is that each stack now
+    carries the flight direction and track it was acquired on.
+
+    PAGE SIZE - MEASURED, NOT ASSUMED (live CMR, 2026-10-26)
+        A 0.05 deg box at glc_105 (29.5023, 82.2504) matches CMR-Hits=1897 granules, and
+        at Langtang (28.22, 85.52) CMR-Hits=3231. The former page_size of 200 therefore
+        sampled only the newest ~9% of the record, split across three competing stacks:
+
+            page_size=200  -> 177 granules ->  31 / 29 / 27 deep per stack
+            page_size=2000 -> 1871 granules -> 340 / 331 / 320 deep per stack
+
+        Keeping every flight direction instead of only the deepest stack makes that worse,
+        because the newest-first slots are now shared by stacks we actually intend to use.
+        The default is raised to CMR's documented maximum of 2000, which at glc_105 reaches
+        back to 2014 on every stack; discovery there costs 1.4-1.9 s.
+
+    DETECTING TRUNCATION - WHY THE TWO OBVIOUS TESTS BOTH FAIL
+        `len(items) == page_size` never fires: CMR returns slightly fewer items than asked
+        for even mid-result (measured at Langtang: 200->173, 500->473, 1000->973,
+        2000->1973), and the shortfall is not a constant.
+
+        `CMR-Hits > len(items)` never stops firing: the header over-counts. At glc_105 a
+        complete walk ends at 1871 granules against a claimed 1897, and asking for the
+        next page returns 0 items - those ~26 are a CMR accounting artefact, not data that
+        exists to be fetched. Judging truncation on the header alone marks every site
+        truncated and the flag stops meaning anything.
+
+        So truncation is judged structurally: did paging stop because the page budget ran
+        out while CMR was still handing over granules? That is exact, and it is why
+        `max_pages` defaults to 2 rather than 1 - with a single page the question is
+        genuinely unanswerable, because CMR returns a CMR-Search-After token even on the
+        final page. The second request is cheap precisely when it is not needed (glc_105:
+        page 2 is empty, 1.38 s -> 1.66 s, truncated=False) and earns its keep when it is
+        (Langtang: page 2 carries 1222 more granules, nearly doubling every stack).
+
+        Measured outcome, `BurstStack.truncated` per stack:
+            glc_105  max_pages=2 -> 1871 granules, 340/331/320 deep, truncated False
+            Langtang max_pages=2 -> 3195 granules, 348/345/337/336/330, truncated True
+            Langtang max_pages=3 -> 3195 granules, same depths,        truncated False
+
+        The Langtang max_pages=2 row is the residual conservative case: paging stopped
+        exactly at exhaustion, and only the empty third page proves that. Flagging it as
+        a lower bound is the honest reading of what was actually observed.
+
+    Raising `max_pages` lifts the ceiling further for a deep-history backfill, though two
+    pages already reach October 2014 - the start of the Sentinel-1 archive - at both
+    sites, far beyond the ~400 days the SBAS network planner keeps.
     """
     bbox = (
         f"{float(lon) - half_box_deg:.4f},{float(lat) - half_box_deg:.4f},"
@@ -247,35 +394,190 @@ def find_burst_stacks(
         {
             "short_name": "SENTINEL-1_BURSTS",
             "bounding_box": bbox,
-            "page_size": str(page_size),
+            "page_size": str(int(page_size)),
             "sort_key": "-start_date",
         }
     )
-    url = f"{settings.cmr_granule_search_url}?{query}"
-    payload = _http_json(url, timeout=timeout)
-    if not payload:
+    url = f"{_cmr_umm_json_url()}?{query}"
+
+    items: List[Dict[str, Any]] = []
+    seen_granules: set[str] = set()
+    total_hits: Optional[int] = None
+    search_after: Optional[str] = None
+    budget = max(1, int(max_pages))
+    truncated = False
+    for page_index in range(budget):
+        response_headers: Dict[str, str] = {}
+        request_headers = {"CMR-Search-After": search_after} if search_after else None
+        payload = _http_json(
+            url, headers=request_headers, timeout=timeout, headers_out=response_headers
+        )
+        if not payload:
+            break
+        page = payload.get("items") or []
+        for item in page:
+            if not isinstance(item, dict) or not isinstance(item.get("umm"), dict):
+                continue
+            # Paged results can overlap; counting a granule twice would inflate stack
+            # depth, and depth is what the planner's redundancy check is spent against.
+            name = item["umm"].get("GranuleUR") or ""
+            if name:
+                if name in seen_granules:
+                    continue
+                seen_granules.add(name)
+            items.append(item)
+        if total_hits is None:
+            try:
+                total_hits = int(_header(response_headers, "CMR-Hits"))
+            except (TypeError, ValueError):
+                total_hits = None  # stubbed or absent: total is unknown, not zero
+        search_after = _header(response_headers, "CMR-Search-After")
+        if not page or not search_after:
+            break  # the result set is exhausted - this is the only "complete" signal
+        if page_index == budget - 1:
+            # Still flowing when the page budget ran out: depth is a lower bound.
+            truncated = True
+
+    if not items:
         return []
 
-    entries = (payload.get("feed") or {}).get("entry") or []
+    if truncated:
+        logger.info(
+            "CMR burst query at (%.4f, %.4f) stopped at the %d-page limit with %d "
+            "granules collected of %s reported by CMR (page_size=%d); per-stack depth "
+            "is a lower bound - raise max_pages to go deeper",
+            lat, lon, budget, len(items),
+            "an unknown number" if total_hits is None else str(total_hits), page_size,
+        )
+
     grouped: Dict[Tuple[str, str, str], List[Tuple[datetime, str]]] = collections.defaultdict(list)
-    for entry in entries:
-        name = entry.get("producer_granule_id") or entry.get("title") or ""
+    # Parallel to `grouped`: the direction/track each granule in the stack declared.
+    metadata: Dict[Tuple[str, str, str], Dict[str, List[Optional[str]]]] = (
+        collections.defaultdict(lambda: {"directions": [], "paths": [], "fulls": []})
+    )
+    for item in items:
+        umm = item.get("umm") or {}
+        name = umm.get("GranuleUR") or ""
         match = BURST_RE.match(name)
         if not match or match.group("pol") not in CO_POLARIZATIONS:
             continue
         acq = _parse_acq(match.group("acq"))
         if acq is None:
             continue
-        grouped[(match.group("burst"), match.group("swath"), match.group("pol"))].append(
-            (acq, name)
-        )
+        key = (match.group("burst"), match.group("swath"), match.group("pol"))
+        grouped[key].append((acq, name))
+
+        attributes = _umm_attributes(umm)
+        direction = (attributes.get("ASCENDING_DESCENDING") or "").strip().upper()
+        metadata[key]["directions"].append(direction if direction in FLIGHT_DIRECTIONS else None)
+        metadata[key]["paths"].append((attributes.get("PATH_NUMBER") or "").strip() or None)
+        metadata[key]["fulls"].append((attributes.get("BURST_ID_FULL") or "").strip() or None)
 
     stacks: List[BurstStack] = []
-    for (burst_id, swath, pol), items in grouped.items():
-        items.sort(key=lambda it: it[0], reverse=True)
-        stacks.append(BurstStack(burst_id, swath, pol, items))
+    for key, acquisitions in grouped.items():
+        burst_id, swath, pol = key
+        acquisitions.sort(key=lambda it: it[0], reverse=True)
+        meta = metadata[key]
+
+        # --- flight direction ------------------------------------------------------
+        declared = [d for d in meta["directions"] if d]
+        resolved = _only(declared)
+        direction = resolved or DIRECTION_UNKNOWN
+        if resolved is None:
+            if len(set(declared)) > 1:
+                # Should be unreachable: a relative burst id belongs to one track and a
+                # track has one direction. If it ever happens the metadata is wrong, and
+                # picking a winner would hand the combiner two "independent" geometries
+                # that are not independent.
+                logger.warning(
+                    "Burst stack %s/%s/%s at (%.4f, %.4f) reports conflicting flight "
+                    "directions %s across %d granules - marking UNKNOWN",
+                    burst_id, swath, pol, lat, lon, sorted(set(declared)), len(acquisitions),
+                )
+            elif not declared:
+                logger.info(
+                    "Burst stack %s/%s/%s at (%.4f, %.4f) has no ASCENDING_DESCENDING "
+                    "attribute - flight direction UNKNOWN (not inferred)",
+                    burst_id, swath, pol, lat, lon,
+                )
+
+        # --- track / path number ---------------------------------------------------
+        path_number = _only(meta["paths"])
+        if path_number is None:
+            # MEASURED anomaly (2026-10-26): at glc_105, 339 of 340 granules of burst
+            # 196362/IW3 report PATH_NUMBER 92 and one 2026-05-30 granule reports 167,
+            # while all 340 agree on BURST_ID_FULL '092_196362_IW3'. The same single-
+            # granule mis-stamp appears at Langtang on 2026-05-29. BURST_ID_FULL embeds
+            # the track, so a unanimous reading of it settles the disagreement; where even
+            # that is split the track stays None rather than becoming a majority vote.
+            track = _only(_track_from_burst_id_full(f) for f in meta["fulls"])
+            declared_paths = sorted({p for p in meta["paths"] if p})
+            if track is not None and declared_paths:
+                logger.warning(
+                    "Burst stack %s/%s/%s at (%.4f, %.4f) reports conflicting PATH_NUMBER "
+                    "%s; BURST_ID_FULL agrees on track %s, using that",
+                    burst_id, swath, pol, lat, lon, declared_paths, track,
+                )
+            path_number = track
+            if path_number is None and declared_paths:
+                logger.warning(
+                    "Burst stack %s/%s/%s at (%.4f, %.4f) has irreconcilable track "
+                    "metadata (PATH_NUMBER %s) - path_number left unset",
+                    burst_id, swath, pol, lat, lon, declared_paths,
+                )
+
+        stacks.append(
+            BurstStack(
+                burst_id,
+                swath,
+                pol,
+                acquisitions,
+                flight_direction=direction,
+                path_number=path_number,
+                truncated=truncated,
+            )
+        )
     stacks.sort(key=lambda s: s.depth, reverse=True)
     return stacks
+
+
+def burst_direction(
+    burst_id: str,
+    swath: str,
+    pol: str,
+    lat: float,
+    lon: float,
+) -> str:
+    """Flight direction of one already-chosen burst stack, or "UNKNOWN".
+
+    WHY THIS EXISTS - a real backfill, not a convenience. Networks solved before this
+    module recorded flight direction persist only (burst_id, swath, polarization); the one
+    solved production network, glc_105 337397/IW1/VV, is stored with flight_direction null.
+    Ascending/descending combination has to know which geometry that existing solution
+    already covers, and re-solving it to find out would cost its whole credit budget again.
+
+    This is a real CMR lookup against the same open endpoint `find_burst_stacks` uses. It
+    returns "UNKNOWN" on every failure - no stack found, no metadata, network down - so a
+    backfill can never invent a geometry for a network it could not identify.
+    """
+    try:
+        for stack in find_burst_stacks(lat, lon):
+            if (
+                stack.burst_id == str(burst_id)
+                and stack.swath == str(swath)
+                and stack.polarization == str(pol)
+            ):
+                return stack.flight_direction
+        logger.info(
+            "No burst stack %s/%s/%s at (%.4f, %.4f) - flight direction UNKNOWN",
+            burst_id, swath, pol, lat, lon,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Flight-direction lookup failed for %s/%s/%s (%s): %s",
+            burst_id, swath, pol, type(exc).__name__, exc,
+        )
+    return DIRECTION_UNKNOWN
 
 
 def select_pair(
