@@ -61,15 +61,59 @@ CACHE_PATH = DATA_DIR / "real_site_features.json"
 
 ISRIC_BASE = "/vsicurl/https://files.isric.org/soilgrids/latest/data"
 
-# property -> (relative VRT path, our field name, d_factor, converter to model units)
-LAYERS = {
-    "clay": ("clay/clay_0-5cm_mean.vrt", "clay_fraction", 10.0, lambda pct: pct / 100.0),
-    "sand": ("sand/sand_0-5cm_mean.vrt", "sand_fraction", 10.0, lambda pct: pct / 100.0),
-    "cfvo": ("cfvo/cfvo_0-5cm_mean.vrt", "coarse_rock_fragment_fraction", 10.0,
-             lambda pct: pct / 100.0),
+# The whole PROFILE is read, not one horizon, and this matters more than it looks.
+#
+# An earlier version sampled 0-5 cm only, reasoning that the near-surface horizon governs
+# infiltration. That is wrong for the infinite-slope model, which treats the column
+# 0 -> z as a single homogeneous layer, and z at glc_105 is 1.45 m. Measured down the
+# profile there:
+#
+#     depth        clay%  sand%  cfvo%  bdod  porosity
+#     0-5cm         25.2   40.0   14.4  1.11     0.581
+#     100-200cm     24.6   41.6   26.9  1.33     0.498
+#
+# Bulk density is 20% higher at the failure plane and coarse-fragment content nearly
+# doubles. Topsoil density understates the overburden, which overstates porosity, which
+# lowers the baseline water table, which RAISES the factor of safety and suppresses
+# alerts. Sampling the wrong horizon makes a warning system quieter - the worst
+# direction for an error to point.
+# Only the horizons that bracket the failure plane are read. Reading all six costs
+# ~11 s per coordinate (24 range-read rasters) which is 3 hours for the catalog; these
+# three cover 30-200 cm, which contains z for the overwhelming majority of sites, at
+# ~5 s. The shallow horizons are deliberately excluded - they are the ones that caused
+# the under-alerting bias in the first place.
+SOIL_DEPTHS = ("30-60cm", "60-100cm", "100-200cm")
+DEPTH_BOUNDS = {"0-5cm": (0, 5), "5-15cm": (5, 15), "15-30cm": (15, 30),
+                "30-60cm": (30, 60), "60-100cm": (60, 100), "100-200cm": (100, 200)}
+
+# property -> (our field name, d_factor, converter to model units)
+PROPERTIES = {
+    "clay": ("clay_fraction", 10.0, lambda pct: pct / 100.0),
+    "sand": ("sand_fraction", 10.0, lambda pct: pct / 100.0),
+    "cfvo": ("coarse_rock_fragment_fraction", 10.0, lambda pct: pct / 100.0),
     # bdod is cg/cm3 with d_factor 100 -> kg/dm3, which is numerically g/cm3
-    "bdod": ("bdod/bdod_0-5cm_mean.vrt", "dry_bulk_density_g_cm3", 100.0, lambda v: v),
+    "bdod": ("dry_bulk_density_g_cm3", 100.0, lambda v: v),
 }
+
+# Default integration depth when the consumer does not state one. 1.5 m is the typical
+# Himalayan colluvial failure plane and close to the z the synthesizer computes.
+DEFAULT_FAILURE_DEPTH_CM = 150.0
+
+
+def depth_weighted(profile, to_cm=DEFAULT_FAILURE_DEPTH_CM):  # noqa: D401
+    """Thickness-weighted mean over 0 -> to_cm, the column the infinite-slope model
+    treats as homogeneous."""
+    num = den = 0.0
+    for label, value in profile.items():
+        lo, hi = DEPTH_BOUNDS.get(label, (None, None))
+        if lo is None or value is None or lo >= to_cm:
+            continue
+        thickness = min(hi, to_cm) - lo
+        if thickness <= 0:
+            continue
+        num += float(value) * thickness
+        den += thickness
+    return (num / den) if den > 0 else None
 
 PLAUSIBLE = {
     "clay_fraction": (0.0, 1.0),
@@ -144,13 +188,14 @@ def main() -> int:
 
     opened = {}
     t_open = time.time()
-    for prop, (rel, field, factor, convert) in LAYERS.items():
-        url = f"{ISRIC_BASE}/{rel}"
-        try:
-            opened[prop] = (rasterio.open(url), field, factor, convert, url)
-            print(f"  opened {prop}", flush=True)
-        except Exception as exc:
-            print(f"  [error] cannot open {prop}: {type(exc).__name__}: {exc}", flush=True)
+    for prop, (field, factor, convert) in PROPERTIES.items():
+        for depth in SOIL_DEPTHS:
+            url = f"{ISRIC_BASE}/{prop}/{prop}_{depth}_mean.vrt"
+            try:
+                opened[(prop, depth)] = (rasterio.open(url), field, factor, convert, url)
+            except Exception as exc:
+                print(f"  [warn] {prop} {depth}: {type(exc).__name__}", flush=True)
+        print(f"  opened {prop}: {sum(1 for k in opened if k[0]==prop)} horizons", flush=True)
     if not opened:
         print("[fatal] no SoilGrids layer could be opened", flush=True)
         return 1
@@ -164,7 +209,8 @@ def main() -> int:
                                        "longitude": lon, "features": {}})
         feats = entry.setdefault("features", {})
         got_any = False
-        for prop, (src, field, factor, convert, url) in opened.items():
+        profiles = {}
+        for (prop, depth), (src, field, factor, convert, url) in opened.items():
             try:
                 xs, ys = warp_transform("EPSG:4326", src.crs, [lon], [lat])
                 row, col = src.index(xs[0], ys[0])
@@ -181,13 +227,21 @@ def main() -> int:
             if not (lo <= value <= hi):
                 implausible += 1
                 continue
+            profiles.setdefault(field, {"_url": url})[depth] = value
+
+        for field, prof in profiles.items():
+            url = prof.pop("_url")
+            weighted = depth_weighted(prof)
+            if weighted is None:
+                continue
             feats[field] = {
-                "value": round(value, 4),
+                "value": round(weighted, 4),
                 "source": "SoilGrids v2.0 (ISRIC) COG mosaic",
                 "url": url,
-                "method": f"0-5cm mean, raw {raw} / d_factor {factor:g}",
+                "method": (f"thickness-weighted mean over 0-{DEFAULT_FAILURE_DEPTH_CM:.0f} cm "
+                           f"- the infinite-slope column - from {len(prof)} horizons"),
                 "fetched_utc": fetched,
-                "raw": int(raw),
+                "profile_by_depth": {k: round(v, 4) for k, v in sorted(prof.items())},
             }
             got_any = True
         if got_any:
