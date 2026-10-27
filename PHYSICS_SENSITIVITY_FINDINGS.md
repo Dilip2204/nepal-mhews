@@ -1,7 +1,27 @@
 # Physics sensitivity findings — the factor of safety does not respond to monsoon rain
 
+> **SUPERSEDED IN PART, 2026-10-27.** Sections 1-5 measured the state BEFORE Milestone
+> 14 wired `environmental_features.py` into the orchestrator. Three claims below are now
+> wrong and are corrected here rather than silently edited, because how they came to be
+> wrong is the instructive part:
+>
+> 1. **"`diurnal_lst_range_c` is a constant 16.0 in production"** - no longer true.
+>    `perpetual_orchestrator.py` calls `enrich_sites_catalog()` and reads
+>    `env.diurnal_lst_range_c`; 16.0 is only the fallback for a site missing from the
+>    cache. glc_105 runs at 14.8.
+> 2. **The section-3 sensitivity table substitutes against the dataclass defaults**, but
+>    production now loads the enriched cache. Those ΔFS figures therefore do not describe
+>    the change that replacing fabricated inputs with real ones actually makes.
+> 3. **"a real 6.03 moved FS by +0.252"** is not supported. 6.03 is close to an
+>    *unfiltered* post-monsoon composite; QC-filtered climatology at glc_105 is 17.03,
+>    and against production's actual 14.8 the real value gives ΔFS ≈ -0.018 - the
+>    *smallest* of the three, not the largest.
+>
+> The rainfall insensitivity in section 1 was measured directly across all 491 sites and
+> stands. Section 6 was written after Milestone 14 and is current.
+>
 > Measured 2026-10-26 against the real 491-site catalog and the real synthesizer.
-> **Nothing has been changed.** This is an investigation record, written because the
+> **Nothing was changed by this document.** This is an investigation record, written because the
 > finding is large enough that fixing it casually would be worse than not fixing it.
 > Companion docs: `AGENTS.md`, `INSAR_NOTES.md`, `HANDOFF.md`.
 
