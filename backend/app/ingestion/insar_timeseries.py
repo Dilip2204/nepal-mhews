@@ -139,6 +139,23 @@ ELEVATION_DETREND_MIN_RANGE_M = 150.0
 # `migrate_legacy_network_keys` rewrites the old form in place so an existing production
 # state file keeps its solved networks instead of silently losing them.
 
+# Bump whenever measure_double_difference starts producing a materially different or
+# richer observation. Stored observations below this are re-measured from the product
+# already on disk instead of being trusted forever.
+#
+# This exists because they were trusted forever, and it cost all three measurement
+# upgrades built in this codebase. The 54 observations in the production state file carry
+# only the five original keys - no atmospheric_correction_applied, no lv_theta_rad /
+# lv_phi_rad, no ref_vs_outer_displacement_mm - because collect_network skips any pair
+# that already has an observation. So per-interferogram atmospheric detrending, the
+# look-vector extraction that the slope-parallel projection and the whole
+# ascending+descending combination depend on, and the reference-stability check had all
+# been written, tested, and shipped, and NONE of them had ever touched the real data.
+# The shipped -0.3 +/- 6.7 mm/yr is a raw, uncorrected number.
+#   1: original - displacement, phase, coherence, pixel counts
+#   2: + elevation detrending, look vectors, reference-annulus displacement
+MEASUREMENT_VERSION = 2
+
 FLIGHT_DIRECTIONS = ("ASCENDING", "DESCENDING")
 DIRECTION_UNKNOWN = "UNKNOWN"
 KEY_SEPARATOR = "@"
@@ -248,6 +265,7 @@ def plan_network(
     max_pairs: int = DEFAULT_MAX_PAIRS,
     since_days: Optional[int] = 400,
     direction: Optional[str] = None,
+    validate_against_asf: bool = True,
 ) -> Optional[NetworkPlan]:
     """Build a redundant small-baseline network over the deepest co-pol stack at a point.
 
@@ -274,6 +292,40 @@ def plan_network(
         acquisitions = [a for a in acquisitions if a[0] >= cutoff]
     if len(acquisitions) < MIN_EPOCHS:
         return None
+
+    # CMR listing a burst does not mean HyP3 can process it, and the gap is expensive.
+    # Measured at glc_105: five of 34 acquisitions were in CMR but absent from ASF's
+    # SLC-BURST index. Each acquisition sits in ~6 pairs, so those five killed 27 of 90
+    # jobs - all failing inside HyP3 with "Failed to find granule(s)", never starting,
+    # 27 credits charged and not refunded. Worse, the hole severed the network in March
+    # and left a solved component spanning only 2025-09-24 to 2026-04-16: the winter
+    # half, with the monsoon absent. One POST to ASF's own index (what HyP3 reads) costs
+    # under a second and prevents all of that.
+    if validate_against_asf:
+        resolved = hyp3.resolve_granules([g for _, g in acquisitions])
+        if resolved is None:
+            logger.warning(
+                "Could not validate burst availability against ASF; planning anyway. "
+                "Some pairs may fail with 'Failed to find granule(s)' and still be charged."
+            )
+        else:
+            usable = [a for a in acquisitions if a[1] in resolved]
+            dropped = len(acquisitions) - len(usable)
+            if dropped:
+                logger.warning(
+                    "%d of %d acquisitions at (%.4f, %.4f) are listed by CMR but absent "
+                    "from ASF's burst index; dropped before planning so they cannot burn "
+                    "credits on jobs that cannot run: %s",
+                    dropped, len(acquisitions), lat, lon,
+                    ", ".join(g for _, g in acquisitions if g not in resolved)[:400],
+                )
+            acquisitions = usable
+            if len(acquisitions) < MIN_EPOCHS:
+                logger.warning(
+                    "Only %d usable acquisitions remain after the availability check; "
+                    "need %d", len(acquisitions), MIN_EPOCHS,
+                )
+                return None
 
     epochs = [a[0] for a in acquisitions]
     pairs: List[Tuple[str, str, datetime, datetime]] = []
@@ -514,7 +566,8 @@ def measure_double_difference(
             "mean_coherence": (
                 None if coh is None else round(float(np.nanmean(coh[target_mask])), 3)
             ),
-            "atmospheric_correction_applied": atmo_applied,
+            "measurement_version": MEASUREMENT_VERSION,
+        "atmospheric_correction_applied": atmo_applied,
             "atmospheric_coefficient_mm_per_m": (
                 None if atmo_coefficient is None
                 else round(float(hyp3._phase_to_displacement_m(atmo_coefficient)) * 1000.0, 5)
@@ -994,10 +1047,34 @@ def collect_network(
     key = network_key(lat, lon, resolved)
     net = available[resolved]
 
-    pending = done = failed = newly_measured = 0
+    pending = done = failed = newly_measured = remeasured = 0
     for pair in net.get("pairs", []):
-        if pair.get("observation") is not None:
+        existing = pair.get("observation")
+        if existing is not None:
+            stale = int(existing.get("measurement_version", 1)) < MEASUREMENT_VERSION
+            if not stale:
+                done += 1
+                continue
+            # The product is already downloaded, so re-measuring costs no credits and no
+            # HyP3 round-trip - only local raster reads. Keep the old observation if the
+            # re-measurement fails, so a transient read error cannot turn a usable pair
+            # into a lost one.
+            cached = hyp3.product_dir_for_job(pair.get("job_id") or "")
+            if cached is None:
+                done += 1
+                continue
+            fresh = measure_double_difference(Path(cached), net["lat"], net["lon"])
+            if fresh is None:
+                logger.warning(
+                    "Re-measurement of job %s produced nothing; keeping the v%s "
+                    "observation", pair.get("job_id"),
+                    existing.get("measurement_version", 1),
+                )
+                done += 1
+                continue
+            pair["observation"] = fresh
             done += 1
+            remeasured += 1
             continue
         if pair.get("status") in ("FAILED", "UNMEASURABLE"):
             failed += 1
@@ -1111,6 +1188,7 @@ def collect_network(
         "status": "OK",
         "pairs_total": len(net.get("pairs", [])),
         "measured": done,
+        "remeasured": remeasured,
         "pending": pending,
         "unusable": failed,
         "newly_measured": newly_measured,

@@ -241,6 +241,15 @@ def test_double_difference_rejects_an_incoherent_target(tmp_path):
 
 
 # ------------------------------------------------------------------ network planning
+@pytest.fixture(autouse=True)
+def _asf_resolves_everything(monkeypatch):
+    """plan_network now checks burst availability against ASF before planning. No test
+    may reach the network, so by default every granule resolves; the tests that exercise
+    the check override this."""
+    monkeypatch.setattr(hyp3, "resolve_granules", lambda names, **k: set(names))
+
+
+
 def _stack(n, start=T0, step_days=12):
     acqs = [
         (start + timedelta(days=step_days * i),
@@ -1170,3 +1179,159 @@ def test_a_blind_geometry_reports_untested_not_agreed(tmp_path, monkeypatch):
     assert "UNTESTABLE" in combo["summary"]
     # and the uncertainty that travels with the velocity is the combination's own
     assert rec["slope_parallel_uncertainty_mm_year"] == combo["uncertainty_mm_year"]
+
+
+# ------------------------------------------------------------------ burst availability
+def test_unavailable_bursts_are_dropped_before_they_can_burn_credits(monkeypatch):
+    """Measured at glc_105: five of 34 acquisitions were listed by CMR but missing from
+    ASF's burst index. Each sits in ~6 pairs, so they killed 27 of 90 jobs - every one
+    failing inside HyP3 with "Failed to find granule(s)", never starting, 27 credits
+    charged and not refunded, and the gap severed the network across the monsoon."""
+    stack = _stack(20)
+    doomed = {stack.acquisitions[3][1], stack.acquisitions[7][1]}
+    monkeypatch.setattr(hyp3, "find_burst_stacks", lambda *a, **k: [stack])
+    monkeypatch.setattr(hyp3, "resolve_granules",
+                        lambda names, **k: {n for n in names if n not in doomed})
+    plan = ts.plan_network(LAT, LON, since_days=None)
+    assert plan is not None
+    planned = {g for p in plan.pairs for g in (p[0], p[1])}
+    assert not (planned & doomed)          # not one credit spent on an unprocessable burst
+    assert len(plan.epochs) == 18          # 20 minus the two that ASF cannot serve
+
+
+def test_a_failed_availability_check_does_not_block_planning(monkeypatch):
+    """ASF being briefly unreachable must not stop the weekly run. 'We do not know' is
+    not the same as 'nothing is available', so planning proceeds with a warning."""
+    monkeypatch.setattr(hyp3, "find_burst_stacks", lambda *a, **k: [_stack(20)])
+    monkeypatch.setattr(hyp3, "resolve_granules", lambda names, **k: None)
+    plan = ts.plan_network(LAT, LON, since_days=None)
+    assert plan is not None
+    assert len(plan.epochs) == 20          # nothing dropped on an inconclusive check
+
+
+def test_planning_refuses_when_too_few_bursts_survive_the_check(monkeypatch):
+    stack = _stack(20)
+    keep = {a[1] for a in stack.acquisitions[:3]}
+    monkeypatch.setattr(hyp3, "find_burst_stacks", lambda *a, **k: [stack])
+    monkeypatch.setattr(hyp3, "resolve_granules", lambda names, **k: keep)
+    assert ts.plan_network(LAT, LON, since_days=None) is None
+
+
+def test_the_check_can_be_turned_off(monkeypatch):
+    def _boom(*a, **k):
+        raise AssertionError("ASF queried despite validate_against_asf=False")
+
+    monkeypatch.setattr(hyp3, "find_burst_stacks", lambda *a, **k: [_stack(20)])
+    monkeypatch.setattr(hyp3, "resolve_granules", _boom)
+    assert ts.plan_network(LAT, LON, since_days=None, validate_against_asf=False) is not None
+
+
+# ------------------------------------------------------------------ measurement versioning
+def test_a_stale_observation_is_re_measured_from_the_local_product(tmp_path, monkeypatch):
+    """The bug this closes cost three shipped features at once. collect_network skipped
+    any pair that already had an observation, so per-interferogram atmospheric
+    detrending, look-vector extraction (which the slope-parallel projection and the whole
+    asc+desc combination depend on) and the reference-stability check had all been
+    written, tested and deployed without ever touching the real data. Re-measuring the
+    production products turned a null (-0.3 +/- 6.7) into a 3.1-sigma detection
+    (+8.4 +/- 2.7)."""
+    monkeypatch.setattr(hyp3, "STATE_PATH", tmp_path / "state.json")
+    monkeypatch.setattr(ts.settings, "hyp3_enabled", True, raising=False)
+    monkeypatch.setattr(hyp3, "_auth_headers", lambda: {"Authorization": "x"})
+    monkeypatch.setattr(hyp3, "burst_direction", lambda *a, **k: "ASCENDING")
+    monkeypatch.setattr(hyp3, "product_dir_for_job", lambda jid, **k: tmp_path / "prod")
+    fresh = {"displacement_mm": 7.0, "measurement_version": ts.MEASUREMENT_VERSION,
+             "lv_theta_rad": 0.97, "lv_phi_rad": -2.95,
+             "atmospheric_correction_applied": True,
+             "atmospheric_coefficient_mm_per_m": 0.004}
+    monkeypatch.setattr(ts, "measure_double_difference", lambda *a, **k: dict(fresh))
+
+    hyp3._save_state({"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(1.0, 2.0, "ASCENDING"): {
+            "lat": 1.0, "lon": 2.0, "flight_direction": "ASCENDING", "pairs": [{
+                "job_id": "j1", "status": "SUCCEEDED",
+                "t_early": "2025-01-01T00:00:00+00:00", "t_late": "2025-01-13T00:00:00+00:00",
+                # a v1 observation: only the five original keys, no version stamp
+                "observation": {"displacement_mm": 1.0, "dd_phase_rad": 0.2,
+                                "mean_coherence": 0.5, "target_pixels": 100,
+                                "reference_pixels": 900},
+            }], "solution": None}}})
+
+    res = ts.collect_network(1.0, 2.0, "ASCENDING")
+    assert res["remeasured"] == 1
+    saved = hyp3._load_state()["networks"][ts.network_key(1.0, 2.0, "ASCENDING")]
+    obs = saved["pairs"][0]["observation"]
+    assert obs["measurement_version"] == ts.MEASUREMENT_VERSION
+    assert obs["lv_theta_rad"] == 0.97            # look vectors now present
+    assert obs["atmospheric_correction_applied"] is True
+
+
+def test_a_current_observation_is_not_re_measured(tmp_path, monkeypatch):
+    def _boom(*a, **k):
+        raise AssertionError("re-measured an observation that was already current")
+
+    monkeypatch.setattr(hyp3, "STATE_PATH", tmp_path / "state.json")
+    monkeypatch.setattr(ts.settings, "hyp3_enabled", True, raising=False)
+    monkeypatch.setattr(hyp3, "_auth_headers", lambda: {"Authorization": "x"})
+    monkeypatch.setattr(hyp3, "burst_direction", lambda *a, **k: "ASCENDING")
+    monkeypatch.setattr(ts, "measure_double_difference", _boom)
+    hyp3._save_state({"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(1.0, 2.0, "ASCENDING"): {
+            "lat": 1.0, "lon": 2.0, "flight_direction": "ASCENDING", "pairs": [{
+                "job_id": "j1", "status": "SUCCEEDED",
+                "t_early": "2025-01-01T00:00:00+00:00", "t_late": "2025-01-13T00:00:00+00:00",
+                "observation": {"displacement_mm": 1.0,
+                                "measurement_version": ts.MEASUREMENT_VERSION},
+            }], "solution": None}}})
+    assert ts.collect_network(1.0, 2.0, "ASCENDING")["remeasured"] == 0
+
+
+def test_a_failed_re_measurement_keeps_the_old_observation(tmp_path, monkeypatch):
+    """A transient raster read error must not turn a usable pair into a lost one."""
+    monkeypatch.setattr(hyp3, "STATE_PATH", tmp_path / "state.json")
+    monkeypatch.setattr(ts.settings, "hyp3_enabled", True, raising=False)
+    monkeypatch.setattr(hyp3, "_auth_headers", lambda: {"Authorization": "x"})
+    monkeypatch.setattr(hyp3, "burst_direction", lambda *a, **k: "ASCENDING")
+    monkeypatch.setattr(hyp3, "product_dir_for_job", lambda jid, **k: tmp_path / "prod")
+    monkeypatch.setattr(ts, "measure_double_difference", lambda *a, **k: None)
+    hyp3._save_state({"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(1.0, 2.0, "ASCENDING"): {
+            "lat": 1.0, "lon": 2.0, "flight_direction": "ASCENDING", "pairs": [{
+                "job_id": "j1", "status": "SUCCEEDED",
+                "t_early": "2025-01-01T00:00:00+00:00", "t_late": "2025-01-13T00:00:00+00:00",
+                "observation": {"displacement_mm": 1.0},
+            }], "solution": None}}})
+    res = ts.collect_network(1.0, 2.0, "ASCENDING")
+    assert res["remeasured"] == 0
+    saved = hyp3._load_state()["networks"][ts.network_key(1.0, 2.0, "ASCENDING")]
+    assert saved["pairs"][0]["observation"]["displacement_mm"] == 1.0
+
+
+def test_a_stale_observation_with_no_local_product_is_kept(tmp_path, monkeypatch):
+    """Products are prunable. Losing the raster must not lose the measurement."""
+    monkeypatch.setattr(hyp3, "STATE_PATH", tmp_path / "state.json")
+    monkeypatch.setattr(ts.settings, "hyp3_enabled", True, raising=False)
+    monkeypatch.setattr(hyp3, "_auth_headers", lambda: {"Authorization": "x"})
+    monkeypatch.setattr(hyp3, "burst_direction", lambda *a, **k: "ASCENDING")
+    monkeypatch.setattr(hyp3, "product_dir_for_job", lambda jid, **k: None)
+    hyp3._save_state({"version": hyp3.STATE_VERSION, "networks": {
+        ts.network_key(1.0, 2.0, "ASCENDING"): {
+            "lat": 1.0, "lon": 2.0, "flight_direction": "ASCENDING", "pairs": [{
+                "job_id": "j1", "status": "SUCCEEDED",
+                "t_early": "2025-01-01T00:00:00+00:00", "t_late": "2025-01-13T00:00:00+00:00",
+                "observation": {"displacement_mm": 1.0},
+            }], "solution": None}}})
+    res = ts.collect_network(1.0, 2.0, "ASCENDING")
+    assert res["measured"] == 1 and res["remeasured"] == 0
+
+
+def test_new_measurements_carry_the_current_version(tmp_path):
+    out = ts.measure_double_difference(
+        _write_interferogram_with_atmosphere(tmp_path, 2.5, 0.5),
+        LAT, LON)
+    assert out["measurement_version"] == ts.MEASUREMENT_VERSION
+    # two of the three things the stale-observation bug had been suppressing (the
+    # third, look vectors, needs lv_theta/lv_phi bands this synthetic fixture omits -
+    # the real products do carry them, verified: 54/54 re-measurable from local disk)
+    assert out["atmospheric_correction_applied"] is True
+    assert "ref_vs_outer_displacement_mm" in out

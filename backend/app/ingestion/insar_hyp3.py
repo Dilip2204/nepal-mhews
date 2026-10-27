@@ -66,7 +66,7 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from app.core.config import settings
 
@@ -322,6 +322,59 @@ def _header(headers: Dict[str, str], name: str) -> Optional[str]:
         if key.lower() == lowered:
             return value
     return None
+
+
+ASF_SEARCH_URL = "https://api.daac.asf.alaska.edu/services/search/param"
+GRANULE_VALIDATE_BATCH = 200
+
+
+def resolve_granules(names: Sequence[str], timeout: int = 90) -> Optional[Set[str]]:
+    """Which of these burst granules does ASF actually hold? None if the check failed.
+
+    This exists because CMR listing a burst does NOT mean HyP3 can process it, and the
+    gap is expensive. Measured at glc_105: five of 34 acquisitions were listed by CMR but
+    absent from ASF's SLC-BURST index, and because each acquisition appears in about six
+    pairs, those five destroyed **27 of 90 jobs**. Every one failed identically inside
+    HyP3 with `burst2safe: ValueError: Failed to find granule(s)`, with
+    `processing_times: null` - they never started. The 27 credits were charged and not
+    refunded, and the resulting gap severed the network in March, leaving a solved
+    component covering 2025-09-24 to 2026-04-16: the winter half, with the monsoon - the
+    season this system exists for - entirely absent.
+
+    ASF's own index is the authoritative answer because it is what HyP3 reads. One POST
+    covers a whole stack in well under a second, so this is cheap insurance against
+    spending credits on jobs that cannot run.
+
+    Returns None (not an empty set) when the check itself could not be performed, so the
+    caller can tell "nothing resolved" from "we do not know" and decline to act on the
+    difference.
+    """
+    wanted = [str(n).strip() for n in names if str(n).strip()]
+    if not wanted:
+        return set()
+    resolved: Set[str] = set()
+    for start in range(0, len(wanted), GRANULE_VALIDATE_BATCH):
+        batch = wanted[start:start + GRANULE_VALIDATE_BATCH]
+        body = urllib.parse.urlencode(
+            {"granule_list": ",".join(batch), "output": "jsonlite"}
+        ).encode("utf-8")
+        try:
+            request = urllib.request.Request(
+                ASF_SEARCH_URL, data=body,
+                headers={"User-Agent": "nepal-mhews/1.0",
+                         "Content-Type": "application/x-www-form-urlencoded"},
+            )
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except Exception as exc:
+            logger.warning("ASF granule validation failed: %s: %s", type(exc).__name__, exc)
+            return None
+        rows = payload.get("results") if isinstance(payload, dict) else payload
+        for row in rows or []:
+            name = (row or {}).get("granuleName")
+            if name:
+                resolved.add(str(name))
+    return resolved
 
 
 def find_burst_stacks(
@@ -815,6 +868,26 @@ def measure_los_velocity_from_product(
     except Exception as exc:
         logger.warning("Failed to measure InSAR product %s: %s", product_dir, exc)
         return None
+
+
+def product_dir_for_job(job_id: str, dest_dir: Optional[Path] = None) -> Optional[Path]:
+    """The already-downloaded product directory for a job, or None.
+
+    Lets a stale observation be re-measured from local rasters when the measurement code
+    improves - no credits, no HyP3 round-trip, no re-download.
+    """
+    if not job_id:
+        return None
+    path = Path(dest_dir or PRODUCT_DIR) / str(job_id)
+    if not path.is_dir():
+        return None
+    # HyP3 zips contain a single product folder, so download_product descends one level
+    # and returns that. Mirror it exactly: measure_double_difference globs the directory
+    # NON-recursively, so handing back the outer folder would silently find no rasters.
+    inner = [d for d in path.iterdir() if d.is_dir()]
+    if len(inner) == 1:
+        path = inner[0]
+    return path if any(path.glob("*_unw_phase.tif")) else None
 
 
 def download_product(job: Dict[str, Any], dest_dir: Optional[Path] = None) -> Optional[Path]:
