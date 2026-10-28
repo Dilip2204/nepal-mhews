@@ -514,11 +514,17 @@ def get_basin_susceptibility_geojson(basin_id: str) -> Dict[str, object]:
 def list_valley_grid_corridors() -> Dict[str, Any]:
     """Return active monitored valley corridors spanning river basins, roads, faults, and settlements."""
     corridors = valley_grid_service.get_corridors_list()
-    total_cells = sum(c["cell_count"] for c in corridors)
+    # Three different totals, because they mean three different things and collapsing
+    # them is how "2,850 monitored cells" got claimed in the first place.
     return {
         "status": "ok",
         "total_corridors": len(corridors),
-        "total_grid_cells": total_cells,
+        "total_grid_cells": sum(c["cell_count"] for c in corridors),
+        "total_measured_cells": sum(c["measured_cells_total"] for c in corridors),
+        "total_cells_without_soil": sum(c["cells_without_soil"] for c in corridors),
+        "total_human_exposed_cells": sum(c["human_exposed_cells"] for c in corridors),
+        "corridors_built": sum(1 for c in corridors if c["grid_built"]),
+        "terrain_provenance": "MEASURED - Copernicus DEM GLO-30, SoilGrids v2.0, OSM, GEM faults",
         "corridors": corridors,
     }
 
@@ -638,9 +644,16 @@ def get_valley_grid_geojson(
     corridor_id: str = Query("langtang", description="Corridor ID"),
     rainfall_72h_mm: Optional[float] = Query(None, ge=0.0, le=1000.0, description="Optional override; if omitted, uses live raw telemetry"),
     seismic_kh: Optional[float] = Query(None, ge=0.0, le=1.0, description="Optional override; if omitted, uses live raw telemetry"),
-    asset_type: Optional[str] = Query(None, description="Filter: all, settlement, highway_roadcut, hydro_infrastructure, river_gorge, cryosphere_glacial"),
+    asset_type: Optional[str] = Query(None, description="Filter: all, settlement, highway_roadcut, hydro_infrastructure, river_gorge, cryosphere_glacial, hillslope"),
+    exposure: str = Query("exposed", description="'exposed' (default) or 'all'"),
+    limit: int = Query(2500, ge=1, le=60000, description="Max features, lowest FS first"),
 ) -> Dict[str, Any]:
-    """GeoJSON FeatureCollection of 240m grid polygons with FS gradient styling for Leaflet/Deck.gl."""
+    """GeoJSON FeatureCollection of 240m grid polygons with FS gradient styling.
+
+    Same measured grid and same filtering contract as ``/grid/cells``; a corridor holds
+    tens of thousands of real cells, so this is capped and the cap keeps the lowest-FS
+    features rather than an arbitrary prefix.
+    """
     if corridor_id not in PRIMARY_CORRIDORS:
         raise HTTPException(status_code=404, detail=f"Unknown corridor '{corridor_id}'")
 
@@ -648,12 +661,19 @@ def get_valley_grid_geojson(
     eff_rain = rainfall_72h_mm if rainfall_72h_mm is not None else float(live_telem["rainfall_72h_mm"])
     eff_kh = seismic_kh if seismic_kh is not None else float(live_telem["seismic_kh"])
 
-    cells = valley_grid_service.evaluate_corridor_grid(
-        corridor_id=corridor_id,
-        rainfall_72h_mm=eff_rain,
-        seismic_kh=eff_kh,
-        asset_type=asset_type,
-    )
+    try:
+        cells = valley_grid_service.evaluate_corridor_grid(
+            corridor_id=corridor_id,
+            rainfall_72h_mm=eff_rain,
+            seismic_kh=eff_kh,
+            asset_type=asset_type,
+            exposed_only=(exposure != "all"),
+            limit=limit,
+        )
+    except FileNotFoundError as exc:
+        # Same contract as /grid/cells: a missing measured grid is an outage, not an
+        # empty FeatureCollection that a client would render as "nothing at risk".
+        raise HTTPException(status_code=503, detail=str(exc))
 
     features = []
     for c in cells:
@@ -668,9 +688,18 @@ def get_valley_grid_geojson(
             "properties": c,
         })
 
+    sel = getattr(valley_grid_service, "_last_selection", {})
     return {
         "type": "FeatureCollection",
         "corridor_id": corridor_id,
+        # Truncation is stated here too. A FeatureCollection that silently holds the
+        # worst 2,500 of 21,000 cells, with no way to tell, would read as complete.
+        "properties": {
+            "cells_evaluated": sel.get("evaluated", len(features)),
+            "cells_after_filters": sel.get("after_filters", len(features)),
+            "truncated": sel.get("truncated", False),
+            "terrain_provenance": "MEASURED - Copernicus DEM GLO-30, SoilGrids v2.0, OSM, GEM faults",
+        },
         "features": features,
     }
 

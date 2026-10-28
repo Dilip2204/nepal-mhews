@@ -260,26 +260,34 @@ def test_grid_is_stable_across_service_instances():
     assert (a["clay_fraction"] == b["clay_fraction"]).all()
 
 
-def test_grid_refuses_to_invent_a_corridor_it_has_not_measured():
-    """A missing grid is an outage, not an empty map quietly drawn."""
+def test_grid_refuses_to_invent_a_corridor_it_has_not_measured(monkeypatch):
+    """A missing grid is an outage, not an empty map quietly drawn.
+
+    The generator this replaced produced a full grid on every call, so "no data" and
+    "no hazard" looked identical downstream. Loading must raise instead.
+    """
+    import app.engine.valley_grid_terrain as vgt
     from app.physics.valley_grid_physics import ValleyGridPhysicsService
 
-    svc = ValleyGridPhysicsService()
-    with pytest.raises(FileNotFoundError):
-        svc._load_corridor_cells.__wrapped__(svc, "langtang") if hasattr(
-            svc._load_corridor_cells, "__wrapped__") else _force_missing(svc)
+    monkeypatch.setattr(vgt, "load_corridor", lambda *a, **k: {})
+    with pytest.raises(FileNotFoundError, match="not generated at runtime"):
+        ValleyGridPhysicsService()._load_corridor_cells("langtang")
 
 
-def _force_missing(svc):
-    """Load with the grid cache pointed at nothing, to prove it raises."""
+def test_grid_refuses_a_corridor_with_no_resolvable_soil(monkeypatch):
+    """Cells present but no soil anywhere is also a refusal, not a silent empty grid."""
+    import numpy as np
+
     import app.engine.valley_grid_terrain as vgt
+    from app.physics.valley_grid_physics import ValleyGridPhysicsService
 
-    original = vgt.load_grid
-    vgt.load_grid = lambda *a, **k: {}
-    try:
-        return svc._load_corridor_cells("langtang")
-    finally:
-        vgt.load_grid = original
+    n = 4
+    nan = np.full(n, np.nan, dtype=np.float32)
+    fake = {"lat": np.full(n, 28.1, dtype=np.float32),
+            "clay_fraction": nan, "dry_bulk_density_g_cm3": nan}
+    monkeypatch.setattr(vgt, "load_corridor", lambda *a, **k: fake)
+    with pytest.raises(FileNotFoundError, match="none with resolved"):
+        ValleyGridPhysicsService()._load_corridor_cells("langtang")
 
 
 def test_soil_absent_cells_are_excluded_not_filled():

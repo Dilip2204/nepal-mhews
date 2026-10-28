@@ -36,6 +36,30 @@ the problem tractable without inventing anything.
 
 Nothing here is interpolated between cells and nothing is defaulted. A cell the DEM
 cannot resolve is omitted, not filled.
+
+Relationship to ``app.engine.valley_grid_engine``
+-------------------------------------------------
+Two grid builders exist and they are not duplicates; read this before extending either.
+
+``valley_grid_engine`` frames corridors as 2 km buffers around OpenStreetMap river
+centrelines, clipped to reaches within 5 km of a monitored site, and does its geometry
+properly in UTM (EPSG:32645). Its scale analysis is the one worth keeping: the seven
+basins as bounding boxes are 7.07 million 100 m cells, Karnali alone 2.25M.
+
+This module frames them as the corridor bounding boxes filtered by slope and by human
+exposure instead, because river centrelines were the wrong scope for the question being
+asked: "this includes only river corridors, include other slopes too that include the
+human settlements, and roads and places where human are present and there is risk to
+human or human made structures". A centreline buffer structurally cannot contain a ridge
+settlement. Langtang's cells reach 18.7 km from the nearest mapped river, which is the
+point.
+
+THIS module is the one the live API reads. ``valley_grid_engine`` is not wired into any
+route; it is kept because its river-reach selection and its UTM handling are both better
+than what is here - this module works in degrees with a cos(latitude) correction, which
+is fine at 240 m in Nepal's latitude band and would not be at higher latitudes. A future
+consolidation should take the geodesy from there and the scope from here, not pick one
+module and delete the other.
 """
 
 from __future__ import annotations
@@ -488,9 +512,43 @@ def attach_fault_distance(cells: List[TerrainCell], faults_geojson: str) -> int:
     """Distance to the nearest mapped active fault trace, from the GEM database.
 
     The field this replaces was ``4.0 + 12.0 * |lat - bbox_centre| / bbox_height`` - a
-    function of where the cell sat in an arbitrary bounding box, not of any fault. GEM's
-    Global Active Faults Database maps 59 traces across the Nepal window, typed by slip
-    style; the Himalayan front shows up as the Reverse set.
+    function of where the cell sat in an arbitrary bounding box, not of any fault.
+
+    KNOWN LIMITATION OF THE SOURCE, and it biases in the unsafe direction.
+    GEM's harmonized database maps 59 traces across the 80-89E / 26-31N window, but they
+    are overwhelmingly NORMAL faults at 29-31N - the N-S rifts of southern Tibet, north
+    of the Himalayan crest. Only 5 cross central Nepal (84-86E, 27-28N). The Main
+    Frontal Thrust, Main Boundary Thrust and MCT, which run E-W through Nepal at roughly
+    27-28N and dominate its seismic hazard, are largely absent from this harmonized
+    layer.
+
+    So these are honestly "distance to the nearest GEM-mapped active trace", which is
+    NOT "distance to the nearest active fault". The gap matters, because the value feeds
+    ``fault_integrity = 0.68 + 0.32 * clip(d / 15, 0, 1)`` - the factor that reduces
+    ``c_prime`` near a fault. That saturates at 15 km, and measured across all 590,611
+    cells:
+
+        corridor                   cells    min km   median    < 15 km   mean integrity
+        langtang                  36,279      15.5     40.5          0          1.0000
+        budhi_gandaki             57,326      20.5     52.5          0          1.0000
+        sun_koshi                 76,295      16.0     61.3          0          1.0000
+        sapta_koshi_kanchenjunga 106,923       4.3     50.4      2,557          0.9981
+        bagmati_narayani          46,236       0.8     31.0      7,909          0.9856
+        karnali                  198,554       0.0     30.3     40,611          0.9709
+        kali_gandaki              68,998       0.0     20.7     25,708          0.9422
+
+    87% of cells sit at or past saturation, so for them the fault-damage term contributes
+    exactly nothing. It is not uniformly dead - Kali Gandaki has 37% of its cells inside
+    15 km and a mean integrity of 0.9422 - but in three corridors it is entirely inert.
+
+    The bias direction is the unsafe one: an overstated distance means less modelled
+    damage, higher cohesion, higher FS and fewer alerts. It fails quiet, the same
+    direction as the soil-horizon bug fixed in backfill_soil_cog.py.
+
+    A fuller trace set for the Himalayan thrust front (HimaTibetMap / Taylor & Yin, or
+    the Nepal-specific active fault compilations) is the real fix and is not done. Until
+    then the consumer should treat this as a lower bound on fault proximity rather than
+    a measurement of it.
     """
     import json as _json
     import math as _m
@@ -639,7 +697,11 @@ def attach_hydro_infrastructure(cells, pbf_path: str, radius_m: float = 1500.0) 
             if g is None:
                 continue
             geoms.append(g)
-            names.append(str(n) if n is not None else "unnamed hydro structure")
+            # `n is not None` is True for a pandas missing value, and str(nan) is the
+            # string "nan" - which then reached the dashboard as a structure's name.
+            # Test the value, not the identity.
+            missing = n is None or (isinstance(n, float) and n != n) or str(n) == "nan"
+            names.append("unnamed hydro structure" if missing else str(n))
     if not geoms:
         return 0
 
