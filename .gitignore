@@ -44,3 +44,6 @@ backend/data/valley_grid_terrain/
 
 # Reproducible upstream fault-source downloads (re-fetched by app/ingestion/fault_traces.py)
 backend/data/fault_sources/
+
+# Dated backups written by backfill scripts before they overwrite a CSV
+backend/data/processed/*.bak

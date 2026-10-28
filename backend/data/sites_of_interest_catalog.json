@@ -139,7 +139,7 @@
     "slope_deg": 44.2,
     "profile_curvature": -0.54,
     "local_relief_m": 580.0,
-    "fault_distance_km": 4.1,
+    "fault_distance_km": 19.41,
     "basin_id": "langtang"
   },
   {
@@ -152,7 +152,7 @@
     "slope_deg": 46.0,
     "profile_curvature": -0.49,
     "local_relief_m": 610.0,
-    "fault_distance_km": 7.8,
+    "fault_distance_km": 1.56,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -165,7 +165,7 @@
     "slope_deg": 41.0,
     "profile_curvature": -0.66,
     "local_relief_m": 460.0,
-    "fault_distance_km": 14.2,
+    "fault_distance_km": 33.43,
     "basin_id": "sun_koshi"
   },
   {
@@ -178,7 +178,7 @@
     "slope_deg": 42.5,
     "profile_curvature": -0.71,
     "local_relief_m": 480.0,
-    "fault_distance_km": 11.8,
+    "fault_distance_km": 19.25,
     "basin_id": "sun_koshi"
   },
   {
@@ -191,7 +191,7 @@
     "slope_deg": 40.8,
     "profile_curvature": -0.63,
     "local_relief_m": 440.0,
-    "fault_distance_km": 15.3,
+    "fault_distance_km": 13.89,
     "basin_id": "karnali"
   },
   {
@@ -204,7 +204,7 @@
     "slope_deg": 14.2,
     "profile_curvature": 0.28,
     "local_relief_m": 120.0,
-    "fault_distance_km": 18.5,
+    "fault_distance_km": 25.59,
     "basin_id": "langtang"
   },
   {
@@ -217,7 +217,7 @@
     "slope_deg": 11.5,
     "profile_curvature": 0.15,
     "local_relief_m": 95.0,
-    "fault_distance_km": 22.0,
+    "fault_distance_km": 18.64,
     "basin_id": "langtang"
   },
   {
@@ -230,7 +230,7 @@
     "slope_deg": 16.8,
     "profile_curvature": 0.34,
     "local_relief_m": 140.0,
-    "fault_distance_km": 16.2,
+    "fault_distance_km": 9.48,
     "basin_id": "langtang"
   },
   {
@@ -243,7 +243,7 @@
     "slope_deg": 12.4,
     "profile_curvature": 0.18,
     "local_relief_m": 110.0,
-    "fault_distance_km": 19.4,
+    "fault_distance_km": 5.46,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -256,7 +256,7 @@
     "slope_deg": 13.0,
     "profile_curvature": 0.22,
     "local_relief_m": 105.0,
-    "fault_distance_km": 24.1,
+    "fault_distance_km": 13.62,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -269,7 +269,7 @@
     "slope_deg": 10.8,
     "profile_curvature": 0.12,
     "local_relief_m": 88.0,
-    "fault_distance_km": 26.5,
+    "fault_distance_km": 20.23,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -282,7 +282,7 @@
     "slope_deg": 9.5,
     "profile_curvature": 0.1,
     "local_relief_m": 82.0,
-    "fault_distance_km": 25.0,
+    "fault_distance_km": 12.04,
     "basin_id": "sun_koshi"
   },
   {
@@ -295,7 +295,7 @@
     "slope_deg": 13.6,
     "profile_curvature": 0.21,
     "local_relief_m": 115.0,
-    "fault_distance_km": 21.8,
+    "fault_distance_km": 24.88,
     "basin_id": "sun_koshi"
   },
   {
@@ -308,7 +308,7 @@
     "slope_deg": 11.2,
     "profile_curvature": 0.19,
     "local_relief_m": 92.0,
-    "fault_distance_km": 28.0,
+    "fault_distance_km": 32.46,
     "basin_id": "kali_gandaki"
   },
   {
@@ -321,7 +321,7 @@
     "slope_deg": 14.5,
     "profile_curvature": 0.26,
     "local_relief_m": 125.0,
-    "fault_distance_km": 23.4,
+    "fault_distance_km": 9.73,
     "basin_id": "kali_gandaki"
   },
   {
@@ -334,7 +334,7 @@
     "slope_deg": 9.5,
     "profile_curvature": -0.859,
     "local_relief_m": 68.7,
-    "fault_distance_km": 44.18,
+    "fault_distance_km": 5.09,
     "basin_id": "karnali"
   },
   {
@@ -347,7 +347,7 @@
     "slope_deg": 0.9,
     "profile_curvature": 0.188,
     "local_relief_m": 13.9,
-    "fault_distance_km": 47.21,
+    "fault_distance_km": 16.65,
     "basin_id": "kali_gandaki"
   },
   {
@@ -373,7 +373,7 @@
     "slope_deg": 16.2,
     "profile_curvature": -0.9,
     "local_relief_m": 147.3,
-    "fault_distance_km": 35.81,
+    "fault_distance_km": 28.13,
     "basin_id": "kali_gandaki"
   },
   {
@@ -386,7 +386,7 @@
     "slope_deg": 25.8,
     "profile_curvature": 0.325,
     "local_relief_m": 229.7,
-    "fault_distance_km": 7.79,
+    "fault_distance_km": 0.33,
     "basin_id": "kali_gandaki"
   },
   {
@@ -412,7 +412,7 @@
     "slope_deg": 40.0,
     "profile_curvature": -0.341,
     "local_relief_m": 281.4,
-    "fault_distance_km": 22.91,
+    "fault_distance_km": 15.36,
     "basin_id": "kali_gandaki"
   },
   {
@@ -425,7 +425,7 @@
     "slope_deg": 26.6,
     "profile_curvature": 0.467,
     "local_relief_m": 204.5,
-    "fault_distance_km": 22.16,
+    "fault_distance_km": 5.07,
     "basin_id": "kali_gandaki"
   },
   {
@@ -438,7 +438,7 @@
     "slope_deg": 31.5,
     "profile_curvature": -0.336,
     "local_relief_m": 82.3,
-    "fault_distance_km": 41.03,
+    "fault_distance_km": 13.26,
     "basin_id": "karnali"
   },
   {
@@ -451,7 +451,7 @@
     "slope_deg": 21.1,
     "profile_curvature": -0.111,
     "local_relief_m": 124.7,
-    "fault_distance_km": 18.21,
+    "fault_distance_km": 1.38,
     "basin_id": "karnali"
   },
   {
@@ -464,7 +464,7 @@
     "slope_deg": 35.6,
     "profile_curvature": 1.273,
     "local_relief_m": 153.6,
-    "fault_distance_km": 45.28,
+    "fault_distance_km": 4.68,
     "basin_id": "karnali"
   },
   {
@@ -477,7 +477,7 @@
     "slope_deg": 41.3,
     "profile_curvature": -0.289,
     "local_relief_m": 243.0,
-    "fault_distance_km": 14.62,
+    "fault_distance_km": 4.2,
     "basin_id": "sun_koshi"
   },
   {
@@ -490,7 +490,7 @@
     "slope_deg": 46.0,
     "profile_curvature": 0.139,
     "local_relief_m": 308.7,
-    "fault_distance_km": 15.33,
+    "fault_distance_km": 2.63,
     "basin_id": "kali_gandaki"
   },
   {
@@ -516,7 +516,7 @@
     "slope_deg": 16.4,
     "profile_curvature": -1.808,
     "local_relief_m": 152.2,
-    "fault_distance_km": 42.72,
+    "fault_distance_km": 10.73,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -529,7 +529,7 @@
     "slope_deg": 36.0,
     "profile_curvature": 0.645,
     "local_relief_m": 231.1,
-    "fault_distance_km": 69.36,
+    "fault_distance_km": 22.81,
     "basin_id": "karnali"
   },
   {
@@ -542,7 +542,7 @@
     "slope_deg": 21.8,
     "profile_curvature": 1.489,
     "local_relief_m": 282.9,
-    "fault_distance_km": 33.43,
+    "fault_distance_km": 20.49,
     "basin_id": "kali_gandaki"
   },
   {
@@ -568,7 +568,7 @@
     "slope_deg": 0.3,
     "profile_curvature": 0.075,
     "local_relief_m": 20.2,
-    "fault_distance_km": 3.06,
+    "fault_distance_km": 0.54,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -594,7 +594,7 @@
     "slope_deg": 37.8,
     "profile_curvature": -1.862,
     "local_relief_m": 170.3,
-    "fault_distance_km": 62.23,
+    "fault_distance_km": 9.85,
     "basin_id": "karnali"
   },
   {
@@ -607,7 +607,7 @@
     "slope_deg": 17.9,
     "profile_curvature": -0.223,
     "local_relief_m": 166.1,
-    "fault_distance_km": 74.96,
+    "fault_distance_km": 7.34,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -620,7 +620,7 @@
     "slope_deg": 29.2,
     "profile_curvature": -0.655,
     "local_relief_m": 171.3,
-    "fault_distance_km": 47.67,
+    "fault_distance_km": 12.98,
     "basin_id": "sun_koshi"
   },
   {
@@ -646,7 +646,7 @@
     "slope_deg": 24.8,
     "profile_curvature": 0.502,
     "local_relief_m": 165.6,
-    "fault_distance_km": 43.41,
+    "fault_distance_km": 22.28,
     "basin_id": "karnali"
   },
   {
@@ -672,7 +672,7 @@
     "slope_deg": 29.6,
     "profile_curvature": -0.272,
     "local_relief_m": 175.0,
-    "fault_distance_km": 57.66,
+    "fault_distance_km": 9.18,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -685,7 +685,7 @@
     "slope_deg": 4.8,
     "profile_curvature": -0.012,
     "local_relief_m": 89.3,
-    "fault_distance_km": 32.48,
+    "fault_distance_km": 20.04,
     "basin_id": "kali_gandaki"
   },
   {
@@ -698,7 +698,7 @@
     "slope_deg": 21.9,
     "profile_curvature": -2.288,
     "local_relief_m": 208.8,
-    "fault_distance_km": 28.88,
+    "fault_distance_km": 8.67,
     "basin_id": "kali_gandaki"
   },
   {
@@ -711,7 +711,7 @@
     "slope_deg": 36.4,
     "profile_curvature": -1.21,
     "local_relief_m": 294.5,
-    "fault_distance_km": 24.21,
+    "fault_distance_km": 14.34,
     "basin_id": "kali_gandaki"
   },
   {
@@ -737,7 +737,7 @@
     "slope_deg": 32.8,
     "profile_curvature": 0.181,
     "local_relief_m": 175.8,
-    "fault_distance_km": 62.8,
+    "fault_distance_km": 10.82,
     "basin_id": "karnali"
   },
   {
@@ -750,7 +750,7 @@
     "slope_deg": 25.6,
     "profile_curvature": -0.795,
     "local_relief_m": 151.9,
-    "fault_distance_km": 36.61,
+    "fault_distance_km": 14.03,
     "basin_id": "karnali"
   },
   {
@@ -763,7 +763,7 @@
     "slope_deg": 24.1,
     "profile_curvature": -0.069,
     "local_relief_m": 108.0,
-    "fault_distance_km": 35.15,
+    "fault_distance_km": 28.86,
     "basin_id": "kali_gandaki"
   },
   {
@@ -776,7 +776,7 @@
     "slope_deg": 2.1,
     "profile_curvature": -0.243,
     "local_relief_m": 12.4,
-    "fault_distance_km": 48.26,
+    "fault_distance_km": 15.43,
     "basin_id": "kali_gandaki"
   },
   {
@@ -789,7 +789,7 @@
     "slope_deg": 36.7,
     "profile_curvature": -0.019,
     "local_relief_m": 221.8,
-    "fault_distance_km": 39.89,
+    "fault_distance_km": 13.41,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -815,7 +815,7 @@
     "slope_deg": 25.1,
     "profile_curvature": -1.296,
     "local_relief_m": 169.8,
-    "fault_distance_km": 18.36,
+    "fault_distance_km": 9.69,
     "basin_id": "kali_gandaki"
   },
   {
@@ -828,7 +828,7 @@
     "slope_deg": 22.3,
     "profile_curvature": 0.724,
     "local_relief_m": 148.5,
-    "fault_distance_km": 6.76,
+    "fault_distance_km": 5.56,
     "basin_id": "kali_gandaki"
   },
   {
@@ -841,7 +841,7 @@
     "slope_deg": 22.2,
     "profile_curvature": 1.501,
     "local_relief_m": 144.4,
-    "fault_distance_km": 26.65,
+    "fault_distance_km": 12.14,
     "basin_id": "karnali"
   },
   {
@@ -854,7 +854,7 @@
     "slope_deg": 23.9,
     "profile_curvature": 0.352,
     "local_relief_m": 190.8,
-    "fault_distance_km": 21.72,
+    "fault_distance_km": 12.49,
     "basin_id": "kali_gandaki"
   },
   {
@@ -867,7 +867,7 @@
     "slope_deg": 41.4,
     "profile_curvature": 1.379,
     "local_relief_m": 293.6,
-    "fault_distance_km": 53.97,
+    "fault_distance_km": 11.48,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -880,7 +880,7 @@
     "slope_deg": 9.9,
     "profile_curvature": -0.234,
     "local_relief_m": 86.6,
-    "fault_distance_km": 19.43,
+    "fault_distance_km": 0.05,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -893,7 +893,7 @@
     "slope_deg": 40.8,
     "profile_curvature": -0.764,
     "local_relief_m": 217.3,
-    "fault_distance_km": 45.47,
+    "fault_distance_km": 5.58,
     "basin_id": "karnali"
   },
   {
@@ -906,7 +906,7 @@
     "slope_deg": 19.8,
     "profile_curvature": 3.088,
     "local_relief_m": 199.4,
-    "fault_distance_km": 9.78,
+    "fault_distance_km": 2.41,
     "basin_id": "sun_koshi"
   },
   {
@@ -919,7 +919,7 @@
     "slope_deg": 29.3,
     "profile_curvature": -0.446,
     "local_relief_m": 158.7,
-    "fault_distance_km": 53.85,
+    "fault_distance_km": 2.33,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -958,7 +958,7 @@
     "slope_deg": 3.1,
     "profile_curvature": 0.548,
     "local_relief_m": 66.6,
-    "fault_distance_km": 26.85,
+    "fault_distance_km": 15.31,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -971,7 +971,7 @@
     "slope_deg": 18.5,
     "profile_curvature": 0.323,
     "local_relief_m": 144.4,
-    "fault_distance_km": 39.18,
+    "fault_distance_km": 11.23,
     "basin_id": "karnali"
   },
   {
@@ -984,7 +984,7 @@
     "slope_deg": 15.6,
     "profile_curvature": -1.376,
     "local_relief_m": 168.8,
-    "fault_distance_km": 43.09,
+    "fault_distance_km": 22.18,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -997,7 +997,7 @@
     "slope_deg": 37.3,
     "profile_curvature": -1.144,
     "local_relief_m": 198.9,
-    "fault_distance_km": 34.6,
+    "fault_distance_km": 33.65,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1036,7 +1036,7 @@
     "slope_deg": 26.5,
     "profile_curvature": -0.21,
     "local_relief_m": 110.2,
-    "fault_distance_km": 67.21,
+    "fault_distance_km": 7.5,
     "basin_id": "sun_koshi"
   },
   {
@@ -1049,7 +1049,7 @@
     "slope_deg": 29.7,
     "profile_curvature": -0.468,
     "local_relief_m": 232.3,
-    "fault_distance_km": 75.8,
+    "fault_distance_km": 3.6,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -1062,7 +1062,7 @@
     "slope_deg": 1.6,
     "profile_curvature": -0.105,
     "local_relief_m": 6.6,
-    "fault_distance_km": 16.58,
+    "fault_distance_km": 8.2,
     "basin_id": "karnali"
   },
   {
@@ -1075,7 +1075,7 @@
     "slope_deg": 16.3,
     "profile_curvature": 0.59,
     "local_relief_m": 117.4,
-    "fault_distance_km": 68.47,
+    "fault_distance_km": 8.72,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -1088,7 +1088,7 @@
     "slope_deg": 0.0,
     "profile_curvature": 1.394,
     "local_relief_m": 123.2,
-    "fault_distance_km": 6.33,
+    "fault_distance_km": 4.38,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1101,7 +1101,7 @@
     "slope_deg": 20.9,
     "profile_curvature": -0.396,
     "local_relief_m": 163.8,
-    "fault_distance_km": 42.0,
+    "fault_distance_km": 7.76,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1114,7 +1114,7 @@
     "slope_deg": 18.9,
     "profile_curvature": -0.078,
     "local_relief_m": 123.9,
-    "fault_distance_km": 59.43,
+    "fault_distance_km": 1.45,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -1127,7 +1127,7 @@
     "slope_deg": 40.7,
     "profile_curvature": 0.337,
     "local_relief_m": 225.8,
-    "fault_distance_km": 25.02,
+    "fault_distance_km": 4.23,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -1140,7 +1140,7 @@
     "slope_deg": 37.7,
     "profile_curvature": -0.18,
     "local_relief_m": 127.5,
-    "fault_distance_km": 5.91,
+    "fault_distance_km": 0.07,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1153,7 +1153,7 @@
     "slope_deg": 11.5,
     "profile_curvature": -0.45,
     "local_relief_m": 176.2,
-    "fault_distance_km": 54.25,
+    "fault_distance_km": 2.93,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1166,7 +1166,7 @@
     "slope_deg": 28.2,
     "profile_curvature": 0.393,
     "local_relief_m": 183.1,
-    "fault_distance_km": 16.96,
+    "fault_distance_km": 4.63,
     "basin_id": "sun_koshi"
   },
   {
@@ -1179,7 +1179,7 @@
     "slope_deg": 14.3,
     "profile_curvature": 0.029,
     "local_relief_m": 125.0,
-    "fault_distance_km": 66.18,
+    "fault_distance_km": 9.15,
     "basin_id": "sun_koshi"
   },
   {
@@ -1205,7 +1205,7 @@
     "slope_deg": 23.4,
     "profile_curvature": -0.851,
     "local_relief_m": 197.6,
-    "fault_distance_km": 51.97,
+    "fault_distance_km": 20.72,
     "basin_id": "sun_koshi"
   },
   {
@@ -1218,7 +1218,7 @@
     "slope_deg": 34.9,
     "profile_curvature": 1.883,
     "local_relief_m": 239.0,
-    "fault_distance_km": 16.73,
+    "fault_distance_km": 15.44,
     "basin_id": "karnali"
   },
   {
@@ -1231,7 +1231,7 @@
     "slope_deg": 20.9,
     "profile_curvature": 1.053,
     "local_relief_m": 147.4,
-    "fault_distance_km": 77.24,
+    "fault_distance_km": 29.98,
     "basin_id": "karnali"
   },
   {
@@ -1244,7 +1244,7 @@
     "slope_deg": 17.3,
     "profile_curvature": -0.056,
     "local_relief_m": 87.7,
-    "fault_distance_km": 55.77,
+    "fault_distance_km": 10.48,
     "basin_id": "karnali"
   },
   {
@@ -1270,7 +1270,7 @@
     "slope_deg": 20.1,
     "profile_curvature": -1.182,
     "local_relief_m": 279.2,
-    "fault_distance_km": 57.81,
+    "fault_distance_km": 29.04,
     "basin_id": "langtang"
   },
   {
@@ -1283,7 +1283,7 @@
     "slope_deg": 2.5,
     "profile_curvature": 0.063,
     "local_relief_m": 56.2,
-    "fault_distance_km": 49.25,
+    "fault_distance_km": 9.96,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1322,7 +1322,7 @@
     "slope_deg": 33.8,
     "profile_curvature": -0.41,
     "local_relief_m": 241.1,
-    "fault_distance_km": 78.9,
+    "fault_distance_km": 0.49,
     "basin_id": "sun_koshi"
   },
   {
@@ -1335,7 +1335,7 @@
     "slope_deg": 26.7,
     "profile_curvature": -0.023,
     "local_relief_m": 123.6,
-    "fault_distance_km": 44.92,
+    "fault_distance_km": 0.05,
     "basin_id": "karnali"
   },
   {
@@ -1348,7 +1348,7 @@
     "slope_deg": 16.4,
     "profile_curvature": -0.557,
     "local_relief_m": 115.2,
-    "fault_distance_km": 55.99,
+    "fault_distance_km": 10.7,
     "basin_id": "karnali"
   },
   {
@@ -1361,7 +1361,7 @@
     "slope_deg": 45.5,
     "profile_curvature": -1.268,
     "local_relief_m": 307.9,
-    "fault_distance_km": 8.63,
+    "fault_distance_km": 1.12,
     "basin_id": "karnali"
   },
   {
@@ -1374,7 +1374,7 @@
     "slope_deg": 44.9,
     "profile_curvature": 0.51,
     "local_relief_m": 177.8,
-    "fault_distance_km": 29.2,
+    "fault_distance_km": 1.88,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -1387,7 +1387,7 @@
     "slope_deg": 36.5,
     "profile_curvature": 1.408,
     "local_relief_m": 285.2,
-    "fault_distance_km": 20.56,
+    "fault_distance_km": 13.33,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1400,7 +1400,7 @@
     "slope_deg": 40.6,
     "profile_curvature": -0.34,
     "local_relief_m": 313.7,
-    "fault_distance_km": 61.37,
+    "fault_distance_km": 6.75,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -1413,7 +1413,7 @@
     "slope_deg": 5.2,
     "profile_curvature": 0.003,
     "local_relief_m": 41.7,
-    "fault_distance_km": 38.5,
+    "fault_distance_km": 22.53,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1426,7 +1426,7 @@
     "slope_deg": 20.8,
     "profile_curvature": 0.804,
     "local_relief_m": 131.5,
-    "fault_distance_km": 32.05,
+    "fault_distance_km": 8.21,
     "basin_id": "karnali"
   },
   {
@@ -1439,7 +1439,7 @@
     "slope_deg": 26.9,
     "profile_curvature": -0.799,
     "local_relief_m": 187.3,
-    "fault_distance_km": 1.45,
+    "fault_distance_km": 1.04,
     "basin_id": "karnali"
   },
   {
@@ -1452,7 +1452,7 @@
     "slope_deg": 31.5,
     "profile_curvature": -0.327,
     "local_relief_m": 187.0,
-    "fault_distance_km": 39.48,
+    "fault_distance_km": 22.98,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -1465,7 +1465,7 @@
     "slope_deg": 48.2,
     "profile_curvature": 2.294,
     "local_relief_m": 174.7,
-    "fault_distance_km": 13.59,
+    "fault_distance_km": 3.88,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -1478,7 +1478,7 @@
     "slope_deg": 22.4,
     "profile_curvature": 0.802,
     "local_relief_m": 202.7,
-    "fault_distance_km": 58.71,
+    "fault_distance_km": 18.86,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -1491,7 +1491,7 @@
     "slope_deg": 27.8,
     "profile_curvature": 0.299,
     "local_relief_m": 215.1,
-    "fault_distance_km": 14.78,
+    "fault_distance_km": 8.92,
     "basin_id": "karnali"
   },
   {
@@ -1504,7 +1504,7 @@
     "slope_deg": 24.4,
     "profile_curvature": 0.088,
     "local_relief_m": 122.3,
-    "fault_distance_km": 44.66,
+    "fault_distance_km": 4.66,
     "basin_id": "karnali"
   },
   {
@@ -1517,7 +1517,7 @@
     "slope_deg": 13.3,
     "profile_curvature": -0.953,
     "local_relief_m": 143.1,
-    "fault_distance_km": 36.56,
+    "fault_distance_km": 11.83,
     "basin_id": "karnali"
   },
   {
@@ -1530,7 +1530,7 @@
     "slope_deg": 34.0,
     "profile_curvature": 0.429,
     "local_relief_m": 163.4,
-    "fault_distance_km": 61.56,
+    "fault_distance_km": 11.31,
     "basin_id": "karnali"
   },
   {
@@ -1543,7 +1543,7 @@
     "slope_deg": 25.4,
     "profile_curvature": -0.602,
     "local_relief_m": 165.7,
-    "fault_distance_km": 62.06,
+    "fault_distance_km": 8.42,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -1556,7 +1556,7 @@
     "slope_deg": 57.1,
     "profile_curvature": -0.787,
     "local_relief_m": 414.6,
-    "fault_distance_km": 12.8,
+    "fault_distance_km": 8.16,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -1569,7 +1569,7 @@
     "slope_deg": 27.6,
     "profile_curvature": 0.525,
     "local_relief_m": 160.9,
-    "fault_distance_km": 28.92,
+    "fault_distance_km": 8.35,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1582,7 +1582,7 @@
     "slope_deg": 10.4,
     "profile_curvature": -0.305,
     "local_relief_m": 88.8,
-    "fault_distance_km": 69.35,
+    "fault_distance_km": 3.91,
     "basin_id": "karnali"
   },
   {
@@ -1621,7 +1621,7 @@
     "slope_deg": 8.7,
     "profile_curvature": 1.693,
     "local_relief_m": 81.3,
-    "fault_distance_km": 18.31,
+    "fault_distance_km": 9.48,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1647,7 +1647,7 @@
     "slope_deg": 30.0,
     "profile_curvature": -0.651,
     "local_relief_m": 190.6,
-    "fault_distance_km": 53.78,
+    "fault_distance_km": 9.73,
     "basin_id": "sun_koshi"
   },
   {
@@ -1660,7 +1660,7 @@
     "slope_deg": 12.5,
     "profile_curvature": -0.538,
     "local_relief_m": 140.6,
-    "fault_distance_km": 17.95,
+    "fault_distance_km": 7.88,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1686,7 +1686,7 @@
     "slope_deg": 25.5,
     "profile_curvature": 0.065,
     "local_relief_m": 188.0,
-    "fault_distance_km": 20.18,
+    "fault_distance_km": 10.05,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1699,7 +1699,7 @@
     "slope_deg": 17.4,
     "profile_curvature": 0.809,
     "local_relief_m": 139.7,
-    "fault_distance_km": 45.3,
+    "fault_distance_km": 4.17,
     "basin_id": "karnali"
   },
   {
@@ -1712,7 +1712,7 @@
     "slope_deg": 13.3,
     "profile_curvature": -0.607,
     "local_relief_m": 111.1,
-    "fault_distance_km": 23.43,
+    "fault_distance_km": 11.1,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1738,7 +1738,7 @@
     "slope_deg": 2.3,
     "profile_curvature": -0.017,
     "local_relief_m": 10.6,
-    "fault_distance_km": 42.39,
+    "fault_distance_km": 19.79,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1751,7 +1751,7 @@
     "slope_deg": 2.3,
     "profile_curvature": -0.32,
     "local_relief_m": 123.8,
-    "fault_distance_km": 12.84,
+    "fault_distance_km": 4.35,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1764,7 +1764,7 @@
     "slope_deg": 18.1,
     "profile_curvature": 0.745,
     "local_relief_m": 189.3,
-    "fault_distance_km": 4.37,
+    "fault_distance_km": 2.23,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1777,7 +1777,7 @@
     "slope_deg": 37.3,
     "profile_curvature": 0.395,
     "local_relief_m": 191.8,
-    "fault_distance_km": 60.21,
+    "fault_distance_km": 10.51,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -1790,7 +1790,7 @@
     "slope_deg": 18.6,
     "profile_curvature": 0.164,
     "local_relief_m": 164.6,
-    "fault_distance_km": 71.12,
+    "fault_distance_km": 14.8,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -1803,7 +1803,7 @@
     "slope_deg": 28.2,
     "profile_curvature": -0.623,
     "local_relief_m": 150.1,
-    "fault_distance_km": 9.68,
+    "fault_distance_km": 2.02,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -1868,7 +1868,7 @@
     "slope_deg": 19.8,
     "profile_curvature": 0.766,
     "local_relief_m": 269.4,
-    "fault_distance_km": 23.91,
+    "fault_distance_km": 7.27,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -1881,7 +1881,7 @@
     "slope_deg": 26.0,
     "profile_curvature": -0.975,
     "local_relief_m": 114.6,
-    "fault_distance_km": 62.38,
+    "fault_distance_km": 14.57,
     "basin_id": "sun_koshi"
   },
   {
@@ -1894,7 +1894,7 @@
     "slope_deg": 32.5,
     "profile_curvature": 0.557,
     "local_relief_m": 184.9,
-    "fault_distance_km": 28.85,
+    "fault_distance_km": 0.29,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -1907,7 +1907,7 @@
     "slope_deg": 45.5,
     "profile_curvature": 0.512,
     "local_relief_m": 256.4,
-    "fault_distance_km": 77.09,
+    "fault_distance_km": 21.51,
     "basin_id": "karnali"
   },
   {
@@ -1920,7 +1920,7 @@
     "slope_deg": 31.0,
     "profile_curvature": -0.645,
     "local_relief_m": 127.4,
-    "fault_distance_km": 29.71,
+    "fault_distance_km": 5.97,
     "basin_id": "karnali"
   },
   {
@@ -1933,7 +1933,7 @@
     "slope_deg": 29.4,
     "profile_curvature": -0.769,
     "local_relief_m": 165.4,
-    "fault_distance_km": 37.39,
+    "fault_distance_km": 14.34,
     "basin_id": "kali_gandaki"
   },
   {
@@ -1946,7 +1946,7 @@
     "slope_deg": 13.1,
     "profile_curvature": 0.133,
     "local_relief_m": 26.1,
-    "fault_distance_km": 17.78,
+    "fault_distance_km": 1.79,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -1959,7 +1959,7 @@
     "slope_deg": 26.2,
     "profile_curvature": 0.868,
     "local_relief_m": 211.0,
-    "fault_distance_km": 63.94,
+    "fault_distance_km": 0.67,
     "basin_id": "karnali"
   },
   {
@@ -1972,7 +1972,7 @@
     "slope_deg": 49.9,
     "profile_curvature": 0.037,
     "local_relief_m": 223.8,
-    "fault_distance_km": 63.64,
+    "fault_distance_km": 2.8,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -1985,7 +1985,7 @@
     "slope_deg": 36.0,
     "profile_curvature": -1.405,
     "local_relief_m": 135.6,
-    "fault_distance_km": 22.83,
+    "fault_distance_km": 8.26,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -1998,7 +1998,7 @@
     "slope_deg": 2.0,
     "profile_curvature": -1.073,
     "local_relief_m": 72.1,
-    "fault_distance_km": 44.97,
+    "fault_distance_km": 17.93,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2011,7 +2011,7 @@
     "slope_deg": 25.6,
     "profile_curvature": 0.196,
     "local_relief_m": 184.5,
-    "fault_distance_km": 51.31,
+    "fault_distance_km": 2.67,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2024,7 +2024,7 @@
     "slope_deg": 11.0,
     "profile_curvature": 0.596,
     "local_relief_m": 110.2,
-    "fault_distance_km": 38.08,
+    "fault_distance_km": 8.4,
     "basin_id": "karnali"
   },
   {
@@ -2037,7 +2037,7 @@
     "slope_deg": 36.5,
     "profile_curvature": 0.025,
     "local_relief_m": 149.2,
-    "fault_distance_km": 24.62,
+    "fault_distance_km": 13.08,
     "basin_id": "sun_koshi"
   },
   {
@@ -2050,7 +2050,7 @@
     "slope_deg": 19.2,
     "profile_curvature": -0.047,
     "local_relief_m": 163.1,
-    "fault_distance_km": 25.94,
+    "fault_distance_km": 5.48,
     "basin_id": "karnali"
   },
   {
@@ -2063,7 +2063,7 @@
     "slope_deg": 15.6,
     "profile_curvature": -0.092,
     "local_relief_m": 182.2,
-    "fault_distance_km": 41.1,
+    "fault_distance_km": 2.41,
     "basin_id": "karnali"
   },
   {
@@ -2089,7 +2089,7 @@
     "slope_deg": 9.1,
     "profile_curvature": -0.938,
     "local_relief_m": 115.7,
-    "fault_distance_km": 39.32,
+    "fault_distance_km": 9.41,
     "basin_id": "kali_gandaki"
   },
   {
@@ -2102,7 +2102,7 @@
     "slope_deg": 30.9,
     "profile_curvature": 0.109,
     "local_relief_m": 109.1,
-    "fault_distance_km": 47.57,
+    "fault_distance_km": 7.37,
     "basin_id": "karnali"
   },
   {
@@ -2115,7 +2115,7 @@
     "slope_deg": 33.1,
     "profile_curvature": -0.817,
     "local_relief_m": 207.5,
-    "fault_distance_km": 4.6,
+    "fault_distance_km": 2.3,
     "basin_id": "kali_gandaki"
   },
   {
@@ -2128,7 +2128,7 @@
     "slope_deg": 13.6,
     "profile_curvature": -1.238,
     "local_relief_m": 144.6,
-    "fault_distance_km": 20.03,
+    "fault_distance_km": 15.2,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2141,7 +2141,7 @@
     "slope_deg": 33.2,
     "profile_curvature": -0.505,
     "local_relief_m": 229.9,
-    "fault_distance_km": 7.18,
+    "fault_distance_km": 2.16,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -2154,7 +2154,7 @@
     "slope_deg": 2.2,
     "profile_curvature": -0.121,
     "local_relief_m": 5.5,
-    "fault_distance_km": 35.8,
+    "fault_distance_km": 35.29,
     "basin_id": "sun_koshi"
   },
   {
@@ -2167,7 +2167,7 @@
     "slope_deg": 30.5,
     "profile_curvature": -0.118,
     "local_relief_m": 234.4,
-    "fault_distance_km": 22.73,
+    "fault_distance_km": 15.49,
     "basin_id": "kali_gandaki"
   },
   {
@@ -2180,7 +2180,7 @@
     "slope_deg": 36.3,
     "profile_curvature": -0.166,
     "local_relief_m": 188.3,
-    "fault_distance_km": 25.23,
+    "fault_distance_km": 5.14,
     "basin_id": "sun_koshi"
   },
   {
@@ -2193,7 +2193,7 @@
     "slope_deg": 14.3,
     "profile_curvature": 0.277,
     "local_relief_m": 175.5,
-    "fault_distance_km": 41.27,
+    "fault_distance_km": 1.57,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -2206,7 +2206,7 @@
     "slope_deg": 12.6,
     "profile_curvature": -0.672,
     "local_relief_m": 154.7,
-    "fault_distance_km": 66.13,
+    "fault_distance_km": 8.49,
     "basin_id": "karnali"
   },
   {
@@ -2219,7 +2219,7 @@
     "slope_deg": 32.3,
     "profile_curvature": -0.412,
     "local_relief_m": 132.9,
-    "fault_distance_km": 40.77,
+    "fault_distance_km": 9.87,
     "basin_id": "karnali"
   },
   {
@@ -2232,7 +2232,7 @@
     "slope_deg": 17.5,
     "profile_curvature": -0.091,
     "local_relief_m": 114.0,
-    "fault_distance_km": 69.64,
+    "fault_distance_km": 3.6,
     "basin_id": "karnali"
   },
   {
@@ -2245,7 +2245,7 @@
     "slope_deg": 0.2,
     "profile_curvature": 0.039,
     "local_relief_m": 11.8,
-    "fault_distance_km": 22.31,
+    "fault_distance_km": 1.38,
     "basin_id": "karnali"
   },
   {
@@ -2258,7 +2258,7 @@
     "slope_deg": 33.5,
     "profile_curvature": -3.039,
     "local_relief_m": 178.7,
-    "fault_distance_km": 20.69,
+    "fault_distance_km": 14.4,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2271,7 +2271,7 @@
     "slope_deg": 28.1,
     "profile_curvature": -1.146,
     "local_relief_m": 203.4,
-    "fault_distance_km": 18.09,
+    "fault_distance_km": 12.65,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2284,7 +2284,7 @@
     "slope_deg": 20.4,
     "profile_curvature": -0.295,
     "local_relief_m": 161.4,
-    "fault_distance_km": 32.32,
+    "fault_distance_km": 32.23,
     "basin_id": "kali_gandaki"
   },
   {
@@ -2310,7 +2310,7 @@
     "slope_deg": 13.5,
     "profile_curvature": -0.155,
     "local_relief_m": 163.9,
-    "fault_distance_km": 54.02,
+    "fault_distance_km": 10.19,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -2336,7 +2336,7 @@
     "slope_deg": 31.8,
     "profile_curvature": -0.733,
     "local_relief_m": 177.4,
-    "fault_distance_km": 31.55,
+    "fault_distance_km": 3.54,
     "basin_id": "karnali"
   },
   {
@@ -2375,7 +2375,7 @@
     "slope_deg": 1.7,
     "profile_curvature": 0.093,
     "local_relief_m": 28.3,
-    "fault_distance_km": 32.51,
+    "fault_distance_km": 20.54,
     "basin_id": "kali_gandaki"
   },
   {
@@ -2388,7 +2388,7 @@
     "slope_deg": 29.0,
     "profile_curvature": 0.027,
     "local_relief_m": 191.8,
-    "fault_distance_km": 54.01,
+    "fault_distance_km": 0.26,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -2401,7 +2401,7 @@
     "slope_deg": 21.2,
     "profile_curvature": 0.158,
     "local_relief_m": 195.5,
-    "fault_distance_km": 67.36,
+    "fault_distance_km": 9.82,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -2414,7 +2414,7 @@
     "slope_deg": 28.7,
     "profile_curvature": -0.51,
     "local_relief_m": 211.0,
-    "fault_distance_km": 22.13,
+    "fault_distance_km": 15.86,
     "basin_id": "kali_gandaki"
   },
   {
@@ -2440,7 +2440,7 @@
     "slope_deg": 43.8,
     "profile_curvature": 0.347,
     "local_relief_m": 308.2,
-    "fault_distance_km": 65.19,
+    "fault_distance_km": 19.33,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2453,7 +2453,7 @@
     "slope_deg": 17.7,
     "profile_curvature": -0.015,
     "local_relief_m": 120.8,
-    "fault_distance_km": 39.85,
+    "fault_distance_km": 11.08,
     "basin_id": "sun_koshi"
   },
   {
@@ -2466,7 +2466,7 @@
     "slope_deg": 5.0,
     "profile_curvature": -0.788,
     "local_relief_m": 79.2,
-    "fault_distance_km": 17.18,
+    "fault_distance_km": 4.7,
     "basin_id": "kali_gandaki"
   },
   {
@@ -2479,7 +2479,7 @@
     "slope_deg": 30.7,
     "profile_curvature": -0.39,
     "local_relief_m": 96.6,
-    "fault_distance_km": 23.92,
+    "fault_distance_km": 5.72,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2492,7 +2492,7 @@
     "slope_deg": 26.1,
     "profile_curvature": -0.288,
     "local_relief_m": 159.3,
-    "fault_distance_km": 63.4,
+    "fault_distance_km": 20.66,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2518,7 +2518,7 @@
     "slope_deg": 2.6,
     "profile_curvature": 0.19,
     "local_relief_m": 92.9,
-    "fault_distance_km": 36.82,
+    "fault_distance_km": 3.0,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -2531,7 +2531,7 @@
     "slope_deg": 32.9,
     "profile_curvature": 0.504,
     "local_relief_m": 196.1,
-    "fault_distance_km": 50.82,
+    "fault_distance_km": 6.57,
     "basin_id": "kali_gandaki"
   },
   {
@@ -2544,7 +2544,7 @@
     "slope_deg": 12.8,
     "profile_curvature": -0.098,
     "local_relief_m": 71.8,
-    "fault_distance_km": 45.51,
+    "fault_distance_km": 10.8,
     "basin_id": "langtang"
   },
   {
@@ -2557,7 +2557,7 @@
     "slope_deg": 23.5,
     "profile_curvature": 0.116,
     "local_relief_m": 161.9,
-    "fault_distance_km": 27.18,
+    "fault_distance_km": 0.49,
     "basin_id": "kali_gandaki"
   },
   {
@@ -2570,7 +2570,7 @@
     "slope_deg": 18.9,
     "profile_curvature": 1.067,
     "local_relief_m": 128.7,
-    "fault_distance_km": 34.59,
+    "fault_distance_km": 14.81,
     "basin_id": "kali_gandaki"
   },
   {
@@ -2583,7 +2583,7 @@
     "slope_deg": 23.5,
     "profile_curvature": -0.124,
     "local_relief_m": 214.0,
-    "fault_distance_km": 42.02,
+    "fault_distance_km": 24.6,
     "basin_id": "kali_gandaki"
   },
   {
@@ -2596,7 +2596,7 @@
     "slope_deg": 26.9,
     "profile_curvature": -0.821,
     "local_relief_m": 281.3,
-    "fault_distance_km": 60.56,
+    "fault_distance_km": 2.28,
     "basin_id": "sun_koshi"
   },
   {
@@ -2609,7 +2609,7 @@
     "slope_deg": 37.1,
     "profile_curvature": -0.044,
     "local_relief_m": 268.9,
-    "fault_distance_km": 12.75,
+    "fault_distance_km": 6.67,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2622,7 +2622,7 @@
     "slope_deg": 2.8,
     "profile_curvature": 0.046,
     "local_relief_m": 20.5,
-    "fault_distance_km": 45.01,
+    "fault_distance_km": 6.81,
     "basin_id": "kali_gandaki"
   },
   {
@@ -2648,7 +2648,7 @@
     "slope_deg": 28.4,
     "profile_curvature": 0.566,
     "local_relief_m": 106.5,
-    "fault_distance_km": 51.29,
+    "fault_distance_km": 21.36,
     "basin_id": "sun_koshi"
   },
   {
@@ -2661,7 +2661,7 @@
     "slope_deg": 33.9,
     "profile_curvature": -0.656,
     "local_relief_m": 183.9,
-    "fault_distance_km": 56.11,
+    "fault_distance_km": 21.3,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2674,7 +2674,7 @@
     "slope_deg": 21.7,
     "profile_curvature": 0.226,
     "local_relief_m": 173.9,
-    "fault_distance_km": 7.48,
+    "fault_distance_km": 2.4,
     "basin_id": "kali_gandaki"
   },
   {
@@ -2687,7 +2687,7 @@
     "slope_deg": 32.2,
     "profile_curvature": 0.133,
     "local_relief_m": 226.7,
-    "fault_distance_km": 45.64,
+    "fault_distance_km": 5.47,
     "basin_id": "karnali"
   },
   {
@@ -2700,7 +2700,7 @@
     "slope_deg": 21.1,
     "profile_curvature": -0.928,
     "local_relief_m": 146.5,
-    "fault_distance_km": 47.71,
+    "fault_distance_km": 9.25,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2713,7 +2713,7 @@
     "slope_deg": 12.0,
     "profile_curvature": 0.507,
     "local_relief_m": 166.7,
-    "fault_distance_km": 7.13,
+    "fault_distance_km": 4.04,
     "basin_id": "karnali"
   },
   {
@@ -2726,7 +2726,7 @@
     "slope_deg": 22.9,
     "profile_curvature": -1.194,
     "local_relief_m": 187.2,
-    "fault_distance_km": 9.78,
+    "fault_distance_km": 4.19,
     "basin_id": "kali_gandaki"
   },
   {
@@ -2739,7 +2739,7 @@
     "slope_deg": 34.2,
     "profile_curvature": -0.436,
     "local_relief_m": 199.9,
-    "fault_distance_km": 14.15,
+    "fault_distance_km": 1.89,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2752,7 +2752,7 @@
     "slope_deg": 28.0,
     "profile_curvature": 0.407,
     "local_relief_m": 148.7,
-    "fault_distance_km": 15.84,
+    "fault_distance_km": 14.13,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2765,7 +2765,7 @@
     "slope_deg": 37.0,
     "profile_curvature": 0.641,
     "local_relief_m": 279.7,
-    "fault_distance_km": 66.31,
+    "fault_distance_km": 20.84,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2778,7 +2778,7 @@
     "slope_deg": 27.6,
     "profile_curvature": 0.24,
     "local_relief_m": 166.8,
-    "fault_distance_km": 14.88,
+    "fault_distance_km": 9.02,
     "basin_id": "karnali"
   },
   {
@@ -2791,7 +2791,7 @@
     "slope_deg": 20.7,
     "profile_curvature": 0.651,
     "local_relief_m": 198.8,
-    "fault_distance_km": 60.75,
+    "fault_distance_km": 12.45,
     "basin_id": "karnali"
   },
   {
@@ -2804,7 +2804,7 @@
     "slope_deg": 32.6,
     "profile_curvature": 2.091,
     "local_relief_m": 262.0,
-    "fault_distance_km": 20.63,
+    "fault_distance_km": 7.03,
     "basin_id": "kali_gandaki"
   },
   {
@@ -2817,7 +2817,7 @@
     "slope_deg": 42.5,
     "profile_curvature": -1.294,
     "local_relief_m": 177.8,
-    "fault_distance_km": 39.92,
+    "fault_distance_km": 8.03,
     "basin_id": "kali_gandaki"
   },
   {
@@ -2843,7 +2843,7 @@
     "slope_deg": 26.8,
     "profile_curvature": 0.866,
     "local_relief_m": 141.3,
-    "fault_distance_km": 22.62,
+    "fault_distance_km": 3.32,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -2856,7 +2856,7 @@
     "slope_deg": 45.0,
     "profile_curvature": 0.484,
     "local_relief_m": 177.3,
-    "fault_distance_km": 14.7,
+    "fault_distance_km": 7.38,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2869,7 +2869,7 @@
     "slope_deg": 21.5,
     "profile_curvature": 0.13,
     "local_relief_m": 136.4,
-    "fault_distance_km": 53.17,
+    "fault_distance_km": 4.61,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2882,7 +2882,7 @@
     "slope_deg": 18.8,
     "profile_curvature": 0.119,
     "local_relief_m": 171.1,
-    "fault_distance_km": 58.49,
+    "fault_distance_km": 4.66,
     "basin_id": "karnali"
   },
   {
@@ -2895,7 +2895,7 @@
     "slope_deg": 44.1,
     "profile_curvature": -0.474,
     "local_relief_m": 130.7,
-    "fault_distance_km": 20.52,
+    "fault_distance_km": 16.06,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2908,7 +2908,7 @@
     "slope_deg": 7.1,
     "profile_curvature": 0.244,
     "local_relief_m": 115.1,
-    "fault_distance_km": 31.06,
+    "fault_distance_km": 11.09,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -2921,7 +2921,7 @@
     "slope_deg": 18.1,
     "profile_curvature": -0.352,
     "local_relief_m": 71.4,
-    "fault_distance_km": 40.65,
+    "fault_distance_km": 7.94,
     "basin_id": "karnali"
   },
   {
@@ -2934,7 +2934,7 @@
     "slope_deg": 22.7,
     "profile_curvature": -0.183,
     "local_relief_m": 158.2,
-    "fault_distance_km": 45.94,
+    "fault_distance_km": 3.31,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -2947,7 +2947,7 @@
     "slope_deg": 5.0,
     "profile_curvature": -0.05,
     "local_relief_m": 10.8,
-    "fault_distance_km": 38.02,
+    "fault_distance_km": 14.74,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -2960,7 +2960,7 @@
     "slope_deg": 30.6,
     "profile_curvature": 1.301,
     "local_relief_m": 227.1,
-    "fault_distance_km": 34.81,
+    "fault_distance_km": 3.58,
     "basin_id": "karnali"
   },
   {
@@ -2986,7 +2986,7 @@
     "slope_deg": 18.8,
     "profile_curvature": 0.581,
     "local_relief_m": 157.2,
-    "fault_distance_km": 63.13,
+    "fault_distance_km": 15.06,
     "basin_id": "sun_koshi"
   },
   {
@@ -3012,7 +3012,7 @@
     "slope_deg": 35.7,
     "profile_curvature": -0.09,
     "local_relief_m": 174.3,
-    "fault_distance_km": 22.57,
+    "fault_distance_km": 1.74,
     "basin_id": "karnali"
   },
   {
@@ -3025,7 +3025,7 @@
     "slope_deg": 24.4,
     "profile_curvature": -1.467,
     "local_relief_m": 182.1,
-    "fault_distance_km": 4.16,
+    "fault_distance_km": 4.11,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3038,7 +3038,7 @@
     "slope_deg": 13.1,
     "profile_curvature": -0.464,
     "local_relief_m": 87.3,
-    "fault_distance_km": 34.98,
+    "fault_distance_km": 6.29,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3051,7 +3051,7 @@
     "slope_deg": 33.0,
     "profile_curvature": 1.429,
     "local_relief_m": 198.3,
-    "fault_distance_km": 4.73,
+    "fault_distance_km": 2.52,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3090,7 +3090,7 @@
     "slope_deg": 37.5,
     "profile_curvature": 0.431,
     "local_relief_m": 234.3,
-    "fault_distance_km": 79.29,
+    "fault_distance_km": 34.09,
     "basin_id": "karnali"
   },
   {
@@ -3103,7 +3103,7 @@
     "slope_deg": 38.6,
     "profile_curvature": -0.348,
     "local_relief_m": 225.3,
-    "fault_distance_km": 63.72,
+    "fault_distance_km": 12.07,
     "basin_id": "karnali"
   },
   {
@@ -3116,7 +3116,7 @@
     "slope_deg": 41.6,
     "profile_curvature": -0.818,
     "local_relief_m": 254.8,
-    "fault_distance_km": 50.0,
+    "fault_distance_km": 22.88,
     "basin_id": "karnali"
   },
   {
@@ -3129,7 +3129,7 @@
     "slope_deg": 34.5,
     "profile_curvature": 1.192,
     "local_relief_m": 191.6,
-    "fault_distance_km": 65.18,
+    "fault_distance_km": 19.95,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -3142,7 +3142,7 @@
     "slope_deg": 7.6,
     "profile_curvature": 0.038,
     "local_relief_m": 28.5,
-    "fault_distance_km": 26.36,
+    "fault_distance_km": 18.25,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -3155,7 +3155,7 @@
     "slope_deg": 19.5,
     "profile_curvature": 0.105,
     "local_relief_m": 160.9,
-    "fault_distance_km": 65.71,
+    "fault_distance_km": 2.17,
     "basin_id": "karnali"
   },
   {
@@ -3168,7 +3168,7 @@
     "slope_deg": 30.9,
     "profile_curvature": -0.045,
     "local_relief_m": 338.0,
-    "fault_distance_km": 44.1,
+    "fault_distance_km": 12.44,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -3181,7 +3181,7 @@
     "slope_deg": 25.0,
     "profile_curvature": -0.896,
     "local_relief_m": 172.3,
-    "fault_distance_km": 42.37,
+    "fault_distance_km": 3.45,
     "basin_id": "sun_koshi"
   },
   {
@@ -3194,7 +3194,7 @@
     "slope_deg": 27.5,
     "profile_curvature": -0.484,
     "local_relief_m": 205.3,
-    "fault_distance_km": 67.72,
+    "fault_distance_km": 2.74,
     "basin_id": "sun_koshi"
   },
   {
@@ -3220,7 +3220,7 @@
     "slope_deg": 3.3,
     "profile_curvature": 0.195,
     "local_relief_m": 109.4,
-    "fault_distance_km": 34.74,
+    "fault_distance_km": 15.0,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3233,7 +3233,7 @@
     "slope_deg": 15.3,
     "profile_curvature": 0.02,
     "local_relief_m": 93.1,
-    "fault_distance_km": 40.89,
+    "fault_distance_km": 14.48,
     "basin_id": "karnali"
   },
   {
@@ -3246,7 +3246,7 @@
     "slope_deg": 17.0,
     "profile_curvature": -0.351,
     "local_relief_m": 104.4,
-    "fault_distance_km": 42.36,
+    "fault_distance_km": 25.89,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3259,7 +3259,7 @@
     "slope_deg": 28.5,
     "profile_curvature": 0.334,
     "local_relief_m": 165.1,
-    "fault_distance_km": 59.65,
+    "fault_distance_km": 1.91,
     "basin_id": "karnali"
   },
   {
@@ -3272,7 +3272,7 @@
     "slope_deg": 23.0,
     "profile_curvature": 0.219,
     "local_relief_m": 131.5,
-    "fault_distance_km": 72.86,
+    "fault_distance_km": 3.4,
     "basin_id": "sun_koshi"
   },
   {
@@ -3285,7 +3285,7 @@
     "slope_deg": 25.3,
     "profile_curvature": -0.138,
     "local_relief_m": 157.4,
-    "fault_distance_km": 63.25,
+    "fault_distance_km": 16.9,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -3298,7 +3298,7 @@
     "slope_deg": 18.2,
     "profile_curvature": -0.125,
     "local_relief_m": 142.2,
-    "fault_distance_km": 49.36,
+    "fault_distance_km": 18.38,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -3324,7 +3324,7 @@
     "slope_deg": 33.3,
     "profile_curvature": -0.617,
     "local_relief_m": 164.0,
-    "fault_distance_km": 55.16,
+    "fault_distance_km": 8.1,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -3337,7 +3337,7 @@
     "slope_deg": 2.5,
     "profile_curvature": 0.023,
     "local_relief_m": 13.1,
-    "fault_distance_km": 43.1,
+    "fault_distance_km": 16.19,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -3363,7 +3363,7 @@
     "slope_deg": 3.1,
     "profile_curvature": 0.289,
     "local_relief_m": 47.1,
-    "fault_distance_km": 55.13,
+    "fault_distance_km": 6.88,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -3376,7 +3376,7 @@
     "slope_deg": 8.3,
     "profile_curvature": -0.02,
     "local_relief_m": 87.4,
-    "fault_distance_km": 22.06,
+    "fault_distance_km": 3.01,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -3389,7 +3389,7 @@
     "slope_deg": 53.5,
     "profile_curvature": 0.435,
     "local_relief_m": 334.8,
-    "fault_distance_km": 38.23,
+    "fault_distance_km": 4.39,
     "basin_id": "langtang"
   },
   {
@@ -3402,7 +3402,7 @@
     "slope_deg": 30.0,
     "profile_curvature": -0.074,
     "local_relief_m": 163.0,
-    "fault_distance_km": 36.13,
+    "fault_distance_km": 8.28,
     "basin_id": "sun_koshi"
   },
   {
@@ -3415,7 +3415,7 @@
     "slope_deg": 33.5,
     "profile_curvature": 0.232,
     "local_relief_m": 141.0,
-    "fault_distance_km": 34.11,
+    "fault_distance_km": 13.86,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3428,7 +3428,7 @@
     "slope_deg": 24.0,
     "profile_curvature": 0.005,
     "local_relief_m": 129.3,
-    "fault_distance_km": 51.85,
+    "fault_distance_km": 1.27,
     "basin_id": "sun_koshi"
   },
   {
@@ -3441,7 +3441,7 @@
     "slope_deg": 0.5,
     "profile_curvature": 0.143,
     "local_relief_m": 97.9,
-    "fault_distance_km": 30.19,
+    "fault_distance_km": 12.97,
     "basin_id": "karnali"
   },
   {
@@ -3454,7 +3454,7 @@
     "slope_deg": 32.8,
     "profile_curvature": -0.185,
     "local_relief_m": 179.4,
-    "fault_distance_km": 37.15,
+    "fault_distance_km": 5.48,
     "basin_id": "langtang"
   },
   {
@@ -3467,7 +3467,7 @@
     "slope_deg": 24.0,
     "profile_curvature": 1.05,
     "local_relief_m": 173.6,
-    "fault_distance_km": 34.58,
+    "fault_distance_km": 14.73,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3480,7 +3480,7 @@
     "slope_deg": 10.5,
     "profile_curvature": 0.526,
     "local_relief_m": 93.6,
-    "fault_distance_km": 3.88,
+    "fault_distance_km": 1.88,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3493,7 +3493,7 @@
     "slope_deg": 37.2,
     "profile_curvature": -0.053,
     "local_relief_m": 222.7,
-    "fault_distance_km": 9.13,
+    "fault_distance_km": 1.14,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3506,7 +3506,7 @@
     "slope_deg": 42.9,
     "profile_curvature": -0.426,
     "local_relief_m": 287.7,
-    "fault_distance_km": 8.98,
+    "fault_distance_km": 4.92,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3519,7 +3519,7 @@
     "slope_deg": 28.5,
     "profile_curvature": 1.272,
     "local_relief_m": 211.9,
-    "fault_distance_km": 40.75,
+    "fault_distance_km": 11.53,
     "basin_id": "karnali"
   },
   {
@@ -3545,7 +3545,7 @@
     "slope_deg": 3.3,
     "profile_curvature": 0.58,
     "local_relief_m": 24.4,
-    "fault_distance_km": 9.14,
+    "fault_distance_km": 1.56,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3571,7 +3571,7 @@
     "slope_deg": 7.9,
     "profile_curvature": -0.2,
     "local_relief_m": 76.1,
-    "fault_distance_km": 31.02,
+    "fault_distance_km": 30.87,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3584,7 +3584,7 @@
     "slope_deg": 7.3,
     "profile_curvature": -0.527,
     "local_relief_m": 88.2,
-    "fault_distance_km": 23.05,
+    "fault_distance_km": 14.01,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -3597,7 +3597,7 @@
     "slope_deg": 33.8,
     "profile_curvature": -0.3,
     "local_relief_m": 162.0,
-    "fault_distance_km": 43.41,
+    "fault_distance_km": 8.1,
     "basin_id": "sun_koshi"
   },
   {
@@ -3610,7 +3610,7 @@
     "slope_deg": 18.3,
     "profile_curvature": 0.4,
     "local_relief_m": 113.9,
-    "fault_distance_km": 1.6,
+    "fault_distance_km": 0.06,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3623,7 +3623,7 @@
     "slope_deg": 17.4,
     "profile_curvature": -0.174,
     "local_relief_m": 185.9,
-    "fault_distance_km": 80.46,
+    "fault_distance_km": 2.04,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -3662,7 +3662,7 @@
     "slope_deg": 20.6,
     "profile_curvature": -0.096,
     "local_relief_m": 128.2,
-    "fault_distance_km": 39.1,
+    "fault_distance_km": 12.66,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3675,7 +3675,7 @@
     "slope_deg": 9.3,
     "profile_curvature": 0.864,
     "local_relief_m": 128.5,
-    "fault_distance_km": 51.92,
+    "fault_distance_km": 4.24,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3688,7 +3688,7 @@
     "slope_deg": 5.6,
     "profile_curvature": 0.222,
     "local_relief_m": 146.8,
-    "fault_distance_km": 38.23,
+    "fault_distance_km": 19.59,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3701,7 +3701,7 @@
     "slope_deg": 36.8,
     "profile_curvature": -0.057,
     "local_relief_m": 248.7,
-    "fault_distance_km": 76.98,
+    "fault_distance_km": 36.07,
     "basin_id": "karnali"
   },
   {
@@ -3727,7 +3727,7 @@
     "slope_deg": 35.0,
     "profile_curvature": 0.598,
     "local_relief_m": 168.9,
-    "fault_distance_km": 31.21,
+    "fault_distance_km": 22.22,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3740,7 +3740,7 @@
     "slope_deg": 21.2,
     "profile_curvature": 0.269,
     "local_relief_m": 134.1,
-    "fault_distance_km": 31.1,
+    "fault_distance_km": 11.3,
     "basin_id": "karnali"
   },
   {
@@ -3753,7 +3753,7 @@
     "slope_deg": 35.9,
     "profile_curvature": 1.18,
     "local_relief_m": 220.0,
-    "fault_distance_km": 62.34,
+    "fault_distance_km": 3.36,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -3766,7 +3766,7 @@
     "slope_deg": 10.9,
     "profile_curvature": 0.105,
     "local_relief_m": 87.6,
-    "fault_distance_km": 38.46,
+    "fault_distance_km": 6.73,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -3779,7 +3779,7 @@
     "slope_deg": 18.5,
     "profile_curvature": 1.432,
     "local_relief_m": 156.8,
-    "fault_distance_km": 54.95,
+    "fault_distance_km": 13.86,
     "basin_id": "karnali"
   },
   {
@@ -3792,7 +3792,7 @@
     "slope_deg": 37.9,
     "profile_curvature": -0.212,
     "local_relief_m": 209.4,
-    "fault_distance_km": 58.67,
+    "fault_distance_km": 13.65,
     "basin_id": "karnali"
   },
   {
@@ -3805,7 +3805,7 @@
     "slope_deg": 34.5,
     "profile_curvature": 0.087,
     "local_relief_m": 191.5,
-    "fault_distance_km": 29.53,
+    "fault_distance_km": 13.83,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3818,7 +3818,7 @@
     "slope_deg": 23.5,
     "profile_curvature": -0.304,
     "local_relief_m": 194.2,
-    "fault_distance_km": 29.14,
+    "fault_distance_km": 1.73,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3831,7 +3831,7 @@
     "slope_deg": 38.5,
     "profile_curvature": -0.873,
     "local_relief_m": 201.8,
-    "fault_distance_km": 55.46,
+    "fault_distance_km": 10.86,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -3844,7 +3844,7 @@
     "slope_deg": 33.9,
     "profile_curvature": -3.113,
     "local_relief_m": 204.1,
-    "fault_distance_km": 34.03,
+    "fault_distance_km": 12.66,
     "basin_id": "karnali"
   },
   {
@@ -3857,7 +3857,7 @@
     "slope_deg": 62.0,
     "profile_curvature": -0.106,
     "local_relief_m": 381.0,
-    "fault_distance_km": 34.6,
+    "fault_distance_km": 9.87,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3870,7 +3870,7 @@
     "slope_deg": 20.7,
     "profile_curvature": 0.323,
     "local_relief_m": 126.9,
-    "fault_distance_km": 57.81,
+    "fault_distance_km": 1.67,
     "basin_id": "sun_koshi"
   },
   {
@@ -3883,7 +3883,7 @@
     "slope_deg": 24.5,
     "profile_curvature": -0.036,
     "local_relief_m": 196.4,
-    "fault_distance_km": 40.03,
+    "fault_distance_km": 15.0,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3896,7 +3896,7 @@
     "slope_deg": 26.6,
     "profile_curvature": -1.129,
     "local_relief_m": 212.2,
-    "fault_distance_km": 39.74,
+    "fault_distance_km": 11.65,
     "basin_id": "karnali"
   },
   {
@@ -3909,7 +3909,7 @@
     "slope_deg": 18.1,
     "profile_curvature": 0.79,
     "local_relief_m": 133.0,
-    "fault_distance_km": 72.97,
+    "fault_distance_km": 1.04,
     "basin_id": "sun_koshi"
   },
   {
@@ -3922,7 +3922,7 @@
     "slope_deg": 30.9,
     "profile_curvature": 0.111,
     "local_relief_m": 234.5,
-    "fault_distance_km": 76.22,
+    "fault_distance_km": 11.59,
     "basin_id": "karnali"
   },
   {
@@ -3935,7 +3935,7 @@
     "slope_deg": 29.3,
     "profile_curvature": 0.028,
     "local_relief_m": 270.2,
-    "fault_distance_km": 77.67,
+    "fault_distance_km": 22.51,
     "basin_id": "karnali"
   },
   {
@@ -3948,7 +3948,7 @@
     "slope_deg": 20.3,
     "profile_curvature": -3.089,
     "local_relief_m": 165.1,
-    "fault_distance_km": 23.27,
+    "fault_distance_km": 13.83,
     "basin_id": "kali_gandaki"
   },
   {
@@ -3974,7 +3974,7 @@
     "slope_deg": 28.5,
     "profile_curvature": 0.434,
     "local_relief_m": 243.5,
-    "fault_distance_km": 65.11,
+    "fault_distance_km": 19.14,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -3987,7 +3987,7 @@
     "slope_deg": 34.3,
     "profile_curvature": -0.751,
     "local_relief_m": 178.6,
-    "fault_distance_km": 11.15,
+    "fault_distance_km": 1.72,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4000,7 +4000,7 @@
     "slope_deg": 28.3,
     "profile_curvature": 0.233,
     "local_relief_m": 220.5,
-    "fault_distance_km": 29.75,
+    "fault_distance_km": 15.2,
     "basin_id": "sun_koshi"
   },
   {
@@ -4013,7 +4013,7 @@
     "slope_deg": 41.1,
     "profile_curvature": -0.072,
     "local_relief_m": 134.0,
-    "fault_distance_km": 5.19,
+    "fault_distance_km": 3.53,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4026,7 +4026,7 @@
     "slope_deg": 43.6,
     "profile_curvature": 1.35,
     "local_relief_m": 118.3,
-    "fault_distance_km": 56.33,
+    "fault_distance_km": 17.22,
     "basin_id": "sun_koshi"
   },
   {
@@ -4039,7 +4039,7 @@
     "slope_deg": 28.2,
     "profile_curvature": 0.239,
     "local_relief_m": 154.7,
-    "fault_distance_km": 28.52,
+    "fault_distance_km": 6.76,
     "basin_id": "karnali"
   },
   {
@@ -4052,7 +4052,7 @@
     "slope_deg": 16.3,
     "profile_curvature": -0.945,
     "local_relief_m": 247.9,
-    "fault_distance_km": 6.74,
+    "fault_distance_km": 0.81,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4065,7 +4065,7 @@
     "slope_deg": 14.9,
     "profile_curvature": 0.589,
     "local_relief_m": 110.7,
-    "fault_distance_km": 63.1,
+    "fault_distance_km": 20.43,
     "basin_id": "karnali"
   },
   {
@@ -4078,7 +4078,7 @@
     "slope_deg": 13.3,
     "profile_curvature": -0.426,
     "local_relief_m": 63.9,
-    "fault_distance_km": 10.68,
+    "fault_distance_km": 7.43,
     "basin_id": "karnali"
   },
   {
@@ -4104,7 +4104,7 @@
     "slope_deg": 29.2,
     "profile_curvature": -0.773,
     "local_relief_m": 221.7,
-    "fault_distance_km": 38.36,
+    "fault_distance_km": 11.78,
     "basin_id": "karnali"
   },
   {
@@ -4117,7 +4117,7 @@
     "slope_deg": 17.5,
     "profile_curvature": -0.49,
     "local_relief_m": 160.2,
-    "fault_distance_km": 22.58,
+    "fault_distance_km": 12.93,
     "basin_id": "sun_koshi"
   },
   {
@@ -4130,7 +4130,7 @@
     "slope_deg": 32.3,
     "profile_curvature": 0.289,
     "local_relief_m": 230.8,
-    "fault_distance_km": 63.92,
+    "fault_distance_km": 11.92,
     "basin_id": "karnali"
   },
   {
@@ -4143,7 +4143,7 @@
     "slope_deg": 4.8,
     "profile_curvature": 0.145,
     "local_relief_m": 46.1,
-    "fault_distance_km": 29.2,
+    "fault_distance_km": 11.58,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4156,7 +4156,7 @@
     "slope_deg": 26.6,
     "profile_curvature": 1.82,
     "local_relief_m": 217.1,
-    "fault_distance_km": 53.31,
+    "fault_distance_km": 20.89,
     "basin_id": "sun_koshi"
   },
   {
@@ -4182,7 +4182,7 @@
     "slope_deg": 35.7,
     "profile_curvature": -0.812,
     "local_relief_m": 230.1,
-    "fault_distance_km": 22.49,
+    "fault_distance_km": 4.34,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -4195,7 +4195,7 @@
     "slope_deg": 26.6,
     "profile_curvature": -0.093,
     "local_relief_m": 144.8,
-    "fault_distance_km": 50.23,
+    "fault_distance_km": 13.22,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4221,7 +4221,7 @@
     "slope_deg": 0.4,
     "profile_curvature": 0.558,
     "local_relief_m": 46.3,
-    "fault_distance_km": 28.13,
+    "fault_distance_km": 17.11,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4234,7 +4234,7 @@
     "slope_deg": 28.9,
     "profile_curvature": 2.302,
     "local_relief_m": 195.1,
-    "fault_distance_km": 71.8,
+    "fault_distance_km": 9.54,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -4247,7 +4247,7 @@
     "slope_deg": 44.9,
     "profile_curvature": 0.551,
     "local_relief_m": 342.6,
-    "fault_distance_km": 74.59,
+    "fault_distance_km": 9.41,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -4260,7 +4260,7 @@
     "slope_deg": 25.2,
     "profile_curvature": -0.783,
     "local_relief_m": 139.6,
-    "fault_distance_km": 19.08,
+    "fault_distance_km": 0.24,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -4273,7 +4273,7 @@
     "slope_deg": 40.2,
     "profile_curvature": -0.464,
     "local_relief_m": 125.2,
-    "fault_distance_km": 55.56,
+    "fault_distance_km": 13.13,
     "basin_id": "karnali"
   },
   {
@@ -4286,7 +4286,7 @@
     "slope_deg": 1.4,
     "profile_curvature": -0.547,
     "local_relief_m": 150.5,
-    "fault_distance_km": 40.6,
+    "fault_distance_km": 9.62,
     "basin_id": "sun_koshi"
   },
   {
@@ -4299,7 +4299,7 @@
     "slope_deg": 0.2,
     "profile_curvature": 0.002,
     "local_relief_m": 2.1,
-    "fault_distance_km": 9.35,
+    "fault_distance_km": 8.43,
     "basin_id": "karnali"
   },
   {
@@ -4312,7 +4312,7 @@
     "slope_deg": 24.4,
     "profile_curvature": 0.422,
     "local_relief_m": 194.9,
-    "fault_distance_km": 14.17,
+    "fault_distance_km": 0.44,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4325,7 +4325,7 @@
     "slope_deg": 21.1,
     "profile_curvature": 0.199,
     "local_relief_m": 171.0,
-    "fault_distance_km": 75.47,
+    "fault_distance_km": 10.82,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -4338,7 +4338,7 @@
     "slope_deg": 42.6,
     "profile_curvature": 0.266,
     "local_relief_m": 176.9,
-    "fault_distance_km": 32.74,
+    "fault_distance_km": 20.26,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4351,7 +4351,7 @@
     "slope_deg": 15.2,
     "profile_curvature": 0.315,
     "local_relief_m": 104.3,
-    "fault_distance_km": 47.7,
+    "fault_distance_km": 10.83,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -4364,7 +4364,7 @@
     "slope_deg": 29.1,
     "profile_curvature": 0.341,
     "local_relief_m": 189.0,
-    "fault_distance_km": 64.32,
+    "fault_distance_km": 9.31,
     "basin_id": "karnali"
   },
   {
@@ -4377,7 +4377,7 @@
     "slope_deg": 28.4,
     "profile_curvature": 0.353,
     "local_relief_m": 132.7,
-    "fault_distance_km": 68.33,
+    "fault_distance_km": 17.6,
     "basin_id": "sun_koshi"
   },
   {
@@ -4390,7 +4390,7 @@
     "slope_deg": 22.9,
     "profile_curvature": -0.508,
     "local_relief_m": 261.4,
-    "fault_distance_km": 75.66,
+    "fault_distance_km": 9.58,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -4403,7 +4403,7 @@
     "slope_deg": 33.5,
     "profile_curvature": -0.069,
     "local_relief_m": 222.2,
-    "fault_distance_km": 30.6,
+    "fault_distance_km": 10.82,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -4416,7 +4416,7 @@
     "slope_deg": 36.7,
     "profile_curvature": 0.27,
     "local_relief_m": 237.7,
-    "fault_distance_km": 42.08,
+    "fault_distance_km": 11.57,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4429,7 +4429,7 @@
     "slope_deg": 34.7,
     "profile_curvature": 0.37,
     "local_relief_m": 356.3,
-    "fault_distance_km": 51.84,
+    "fault_distance_km": 5.42,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4442,7 +4442,7 @@
     "slope_deg": 4.8,
     "profile_curvature": -0.036,
     "local_relief_m": 53.5,
-    "fault_distance_km": 40.45,
+    "fault_distance_km": 4.28,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -4455,7 +4455,7 @@
     "slope_deg": 3.9,
     "profile_curvature": 0.585,
     "local_relief_m": 92.0,
-    "fault_distance_km": 57.92,
+    "fault_distance_km": 3.9,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -4481,7 +4481,7 @@
     "slope_deg": 5.4,
     "profile_curvature": -1.349,
     "local_relief_m": 127.0,
-    "fault_distance_km": 47.39,
+    "fault_distance_km": 10.57,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4494,7 +4494,7 @@
     "slope_deg": 23.3,
     "profile_curvature": 0.263,
     "local_relief_m": 132.2,
-    "fault_distance_km": 56.59,
+    "fault_distance_km": 0.57,
     "basin_id": "sun_koshi"
   },
   {
@@ -4507,7 +4507,7 @@
     "slope_deg": 26.4,
     "profile_curvature": -1.111,
     "local_relief_m": 229.8,
-    "fault_distance_km": 47.58,
+    "fault_distance_km": 0.55,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -4520,7 +4520,7 @@
     "slope_deg": 31.8,
     "profile_curvature": 1.012,
     "local_relief_m": 190.5,
-    "fault_distance_km": 72.38,
+    "fault_distance_km": 0.85,
     "basin_id": "karnali"
   },
   {
@@ -4533,7 +4533,7 @@
     "slope_deg": 33.5,
     "profile_curvature": -0.382,
     "local_relief_m": 203.0,
-    "fault_distance_km": 59.11,
+    "fault_distance_km": 12.84,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -4546,7 +4546,7 @@
     "slope_deg": 18.1,
     "profile_curvature": 1.23,
     "local_relief_m": 125.2,
-    "fault_distance_km": 30.82,
+    "fault_distance_km": 12.4,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4559,7 +4559,7 @@
     "slope_deg": 34.5,
     "profile_curvature": 0.222,
     "local_relief_m": 197.2,
-    "fault_distance_km": 53.12,
+    "fault_distance_km": 9.31,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4572,7 +4572,7 @@
     "slope_deg": 46.3,
     "profile_curvature": 0.513,
     "local_relief_m": 274.2,
-    "fault_distance_km": 63.44,
+    "fault_distance_km": 10.46,
     "basin_id": "sun_koshi"
   },
   {
@@ -4585,7 +4585,7 @@
     "slope_deg": 44.0,
     "profile_curvature": -0.351,
     "local_relief_m": 359.5,
-    "fault_distance_km": 46.35,
+    "fault_distance_km": 6.89,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -4598,7 +4598,7 @@
     "slope_deg": 0.6,
     "profile_curvature": 0.14,
     "local_relief_m": 7.1,
-    "fault_distance_km": 21.72,
+    "fault_distance_km": 17.04,
     "basin_id": "karnali"
   },
   {
@@ -4611,7 +4611,7 @@
     "slope_deg": 24.9,
     "profile_curvature": 0.623,
     "local_relief_m": 76.0,
-    "fault_distance_km": 40.29,
+    "fault_distance_km": 10.07,
     "basin_id": "sun_koshi"
   },
   {
@@ -4624,7 +4624,7 @@
     "slope_deg": 14.5,
     "profile_curvature": -0.361,
     "local_relief_m": 121.9,
-    "fault_distance_km": 22.02,
+    "fault_distance_km": 2.83,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -4637,7 +4637,7 @@
     "slope_deg": 0.4,
     "profile_curvature": -0.02,
     "local_relief_m": 5.8,
-    "fault_distance_km": 8.27,
+    "fault_distance_km": 7.66,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4663,7 +4663,7 @@
     "slope_deg": 48.6,
     "profile_curvature": 1.009,
     "local_relief_m": 267.0,
-    "fault_distance_km": 26.36,
+    "fault_distance_km": 21.26,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4676,7 +4676,7 @@
     "slope_deg": 31.8,
     "profile_curvature": -0.483,
     "local_relief_m": 166.4,
-    "fault_distance_km": 25.32,
+    "fault_distance_km": 3.72,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4689,7 +4689,7 @@
     "slope_deg": 58.7,
     "profile_curvature": -1.452,
     "local_relief_m": 241.2,
-    "fault_distance_km": 41.23,
+    "fault_distance_km": 1.85,
     "basin_id": "langtang"
   },
   {
@@ -4702,7 +4702,7 @@
     "slope_deg": 26.3,
     "profile_curvature": -0.422,
     "local_relief_m": 185.8,
-    "fault_distance_km": 71.34,
+    "fault_distance_km": 0.06,
     "basin_id": "sun_koshi"
   },
   {
@@ -4715,7 +4715,7 @@
     "slope_deg": 20.3,
     "profile_curvature": -0.56,
     "local_relief_m": 136.5,
-    "fault_distance_km": 62.7,
+    "fault_distance_km": 15.37,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -4728,7 +4728,7 @@
     "slope_deg": 16.6,
     "profile_curvature": 1.908,
     "local_relief_m": 139.8,
-    "fault_distance_km": 29.86,
+    "fault_distance_km": 3.76,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4741,7 +4741,7 @@
     "slope_deg": 14.1,
     "profile_curvature": 0.223,
     "local_relief_m": 121.4,
-    "fault_distance_km": 42.37,
+    "fault_distance_km": 25.89,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4754,7 +4754,7 @@
     "slope_deg": 5.7,
     "profile_curvature": 0.288,
     "local_relief_m": 74.1,
-    "fault_distance_km": 19.47,
+    "fault_distance_km": 14.04,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4767,7 +4767,7 @@
     "slope_deg": 22.7,
     "profile_curvature": 0.062,
     "local_relief_m": 174.3,
-    "fault_distance_km": 44.62,
+    "fault_distance_km": 2.94,
     "basin_id": "karnali"
   },
   {
@@ -4780,7 +4780,7 @@
     "slope_deg": 34.4,
     "profile_curvature": -0.818,
     "local_relief_m": 140.5,
-    "fault_distance_km": 26.85,
+    "fault_distance_km": 0.52,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4793,7 +4793,7 @@
     "slope_deg": 31.1,
     "profile_curvature": -0.783,
     "local_relief_m": 213.3,
-    "fault_distance_km": 5.62,
+    "fault_distance_km": 0.04,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4806,7 +4806,7 @@
     "slope_deg": 19.9,
     "profile_curvature": 0.939,
     "local_relief_m": 111.3,
-    "fault_distance_km": 48.43,
+    "fault_distance_km": 8.75,
     "basin_id": "karnali"
   },
   {
@@ -4819,7 +4819,7 @@
     "slope_deg": 23.5,
     "profile_curvature": 2.278,
     "local_relief_m": 192.5,
-    "fault_distance_km": 50.63,
+    "fault_distance_km": 7.85,
     "basin_id": "karnali"
   },
   {
@@ -4832,7 +4832,7 @@
     "slope_deg": 21.1,
     "profile_curvature": -0.47,
     "local_relief_m": 148.9,
-    "fault_distance_km": 39.6,
+    "fault_distance_km": 10.04,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4845,7 +4845,7 @@
     "slope_deg": 41.8,
     "profile_curvature": -0.003,
     "local_relief_m": 250.4,
-    "fault_distance_km": 14.53,
+    "fault_distance_km": 7.15,
     "basin_id": "sun_koshi"
   },
   {
@@ -4871,7 +4871,7 @@
     "slope_deg": 36.3,
     "profile_curvature": 0.325,
     "local_relief_m": 244.8,
-    "fault_distance_km": 47.02,
+    "fault_distance_km": 18.47,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -4884,7 +4884,7 @@
     "slope_deg": 33.1,
     "profile_curvature": -1.092,
     "local_relief_m": 212.3,
-    "fault_distance_km": 51.19,
+    "fault_distance_km": 10.72,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4910,7 +4910,7 @@
     "slope_deg": 20.6,
     "profile_curvature": -2.318,
     "local_relief_m": 168.9,
-    "fault_distance_km": 28.27,
+    "fault_distance_km": 7.97,
     "basin_id": "karnali"
   },
   {
@@ -4923,7 +4923,7 @@
     "slope_deg": 24.1,
     "profile_curvature": 0.843,
     "local_relief_m": 148.1,
-    "fault_distance_km": 73.57,
+    "fault_distance_km": 1.52,
     "basin_id": "karnali"
   },
   {
@@ -4936,7 +4936,7 @@
     "slope_deg": 27.5,
     "profile_curvature": -0.377,
     "local_relief_m": 217.4,
-    "fault_distance_km": 48.55,
+    "fault_distance_km": 11.88,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -4949,7 +4949,7 @@
     "slope_deg": 32.4,
     "profile_curvature": -0.544,
     "local_relief_m": 160.0,
-    "fault_distance_km": 45.58,
+    "fault_distance_km": 5.35,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -4962,7 +4962,7 @@
     "slope_deg": 28.5,
     "profile_curvature": -0.395,
     "local_relief_m": 155.0,
-    "fault_distance_km": 24.19,
+    "fault_distance_km": 18.09,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -4975,7 +4975,7 @@
     "slope_deg": 21.1,
     "profile_curvature": -0.49,
     "local_relief_m": 100.0,
-    "fault_distance_km": 31.8,
+    "fault_distance_km": 20.66,
     "basin_id": "kali_gandaki"
   },
   {
@@ -4988,7 +4988,7 @@
     "slope_deg": 46.9,
     "profile_curvature": 1.385,
     "local_relief_m": 411.4,
-    "fault_distance_km": 66.31,
+    "fault_distance_km": 9.22,
     "basin_id": "karnali"
   },
   {
@@ -5001,7 +5001,7 @@
     "slope_deg": 34.7,
     "profile_curvature": -0.262,
     "local_relief_m": 122.7,
-    "fault_distance_km": 66.51,
+    "fault_distance_km": 2.13,
     "basin_id": "sun_koshi"
   },
   {
@@ -5014,7 +5014,7 @@
     "slope_deg": 15.4,
     "profile_curvature": -0.052,
     "local_relief_m": 130.0,
-    "fault_distance_km": 68.28,
+    "fault_distance_km": 8.67,
     "basin_id": "sun_koshi"
   },
   {
@@ -5027,7 +5027,7 @@
     "slope_deg": 28.4,
     "profile_curvature": 0.604,
     "local_relief_m": 282.3,
-    "fault_distance_km": 24.47,
+    "fault_distance_km": 4.03,
     "basin_id": "kali_gandaki"
   },
   {
@@ -5040,7 +5040,7 @@
     "slope_deg": 23.2,
     "profile_curvature": 0.218,
     "local_relief_m": 132.0,
-    "fault_distance_km": 29.18,
+    "fault_distance_km": 2.35,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -5053,7 +5053,7 @@
     "slope_deg": 21.8,
     "profile_curvature": -0.035,
     "local_relief_m": 132.3,
-    "fault_distance_km": 35.14,
+    "fault_distance_km": 10.47,
     "basin_id": "kali_gandaki"
   },
   {
@@ -5066,7 +5066,7 @@
     "slope_deg": 18.9,
     "profile_curvature": 0.411,
     "local_relief_m": 152.4,
-    "fault_distance_km": 43.68,
+    "fault_distance_km": 1.63,
     "basin_id": "sun_koshi"
   },
   {
@@ -5079,7 +5079,7 @@
     "slope_deg": 19.0,
     "profile_curvature": 0.477,
     "local_relief_m": 151.2,
-    "fault_distance_km": 54.87,
+    "fault_distance_km": 8.51,
     "basin_id": "karnali"
   },
   {
@@ -5092,7 +5092,7 @@
     "slope_deg": 3.6,
     "profile_curvature": 0.093,
     "local_relief_m": 28.3,
-    "fault_distance_km": 41.9,
+    "fault_distance_km": 11.84,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -5105,7 +5105,7 @@
     "slope_deg": 23.1,
     "profile_curvature": 0.09,
     "local_relief_m": 171.0,
-    "fault_distance_km": 79.0,
+    "fault_distance_km": 8.69,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -5157,7 +5157,7 @@
     "slope_deg": 12.0,
     "profile_curvature": -0.309,
     "local_relief_m": 157.0,
-    "fault_distance_km": 41.72,
+    "fault_distance_km": 26.26,
     "basin_id": "kali_gandaki"
   },
   {
@@ -5170,7 +5170,7 @@
     "slope_deg": 19.7,
     "profile_curvature": 0.369,
     "local_relief_m": 131.4,
-    "fault_distance_km": 40.83,
+    "fault_distance_km": 3.98,
     "basin_id": "sun_koshi"
   },
   {
@@ -5183,7 +5183,7 @@
     "slope_deg": 3.1,
     "profile_curvature": 0.295,
     "local_relief_m": 65.8,
-    "fault_distance_km": 7.95,
+    "fault_distance_km": 6.24,
     "basin_id": "kali_gandaki"
   },
   {
@@ -5196,7 +5196,7 @@
     "slope_deg": 12.5,
     "profile_curvature": 0.723,
     "local_relief_m": 106.8,
-    "fault_distance_km": 51.0,
+    "fault_distance_km": 6.56,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -5209,7 +5209,7 @@
     "slope_deg": 42.0,
     "profile_curvature": -0.561,
     "local_relief_m": 219.7,
-    "fault_distance_km": 77.25,
+    "fault_distance_km": 8.59,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -5222,7 +5222,7 @@
     "slope_deg": 11.1,
     "profile_curvature": 0.193,
     "local_relief_m": 85.9,
-    "fault_distance_km": 37.68,
+    "fault_distance_km": 2.54,
     "basin_id": "karnali"
   },
   {
@@ -5235,7 +5235,7 @@
     "slope_deg": 28.9,
     "profile_curvature": 0.54,
     "local_relief_m": 124.3,
-    "fault_distance_km": 78.9,
+    "fault_distance_km": 3.28,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -5248,7 +5248,7 @@
     "slope_deg": 7.7,
     "profile_curvature": -0.116,
     "local_relief_m": 53.0,
-    "fault_distance_km": 44.39,
+    "fault_distance_km": 21.95,
     "basin_id": "langtang"
   },
   {
@@ -5261,7 +5261,7 @@
     "slope_deg": 12.7,
     "profile_curvature": -0.774,
     "local_relief_m": 77.9,
-    "fault_distance_km": 56.8,
+    "fault_distance_km": 1.42,
     "basin_id": "sun_koshi"
   },
   {
@@ -5274,7 +5274,7 @@
     "slope_deg": 28.4,
     "profile_curvature": -1.131,
     "local_relief_m": 239.3,
-    "fault_distance_km": 8.28,
+    "fault_distance_km": 1.3,
     "basin_id": "kali_gandaki"
   },
   {
@@ -5287,7 +5287,7 @@
     "slope_deg": 48.6,
     "profile_curvature": -0.638,
     "local_relief_m": 351.7,
-    "fault_distance_km": 49.96,
+    "fault_distance_km": 22.23,
     "basin_id": "karnali"
   },
   {
@@ -5313,7 +5313,7 @@
     "slope_deg": 23.1,
     "profile_curvature": -0.441,
     "local_relief_m": 146.1,
-    "fault_distance_km": 31.7,
+    "fault_distance_km": 13.69,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -5326,7 +5326,7 @@
     "slope_deg": 10.4,
     "profile_curvature": -1.585,
     "local_relief_m": 154.9,
-    "fault_distance_km": 41.58,
+    "fault_distance_km": 7.81,
     "basin_id": "karnali"
   },
   {
@@ -5352,7 +5352,7 @@
     "slope_deg": 2.0,
     "profile_curvature": -0.484,
     "local_relief_m": 54.3,
-    "fault_distance_km": 34.76,
+    "fault_distance_km": 15.06,
     "basin_id": "kali_gandaki"
   },
   {
@@ -5365,7 +5365,7 @@
     "slope_deg": 13.7,
     "profile_curvature": 0.532,
     "local_relief_m": 118.2,
-    "fault_distance_km": 15.91,
+    "fault_distance_km": 5.54,
     "basin_id": "sun_koshi"
   },
   {
@@ -5378,7 +5378,7 @@
     "slope_deg": 11.7,
     "profile_curvature": 0.512,
     "local_relief_m": 120.6,
-    "fault_distance_km": 25.44,
+    "fault_distance_km": 4.28,
     "basin_id": "karnali"
   },
   {
@@ -5391,7 +5391,7 @@
     "slope_deg": 33.6,
     "profile_curvature": 0.613,
     "local_relief_m": 239.2,
-    "fault_distance_km": 43.6,
+    "fault_distance_km": 9.62,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -5404,7 +5404,7 @@
     "slope_deg": 26.1,
     "profile_curvature": 0.093,
     "local_relief_m": 125.3,
-    "fault_distance_km": 54.44,
+    "fault_distance_km": 18.96,
     "basin_id": "karnali"
   },
   {
@@ -5417,7 +5417,7 @@
     "slope_deg": 6.0,
     "profile_curvature": -0.275,
     "local_relief_m": 197.3,
-    "fault_distance_km": 65.27,
+    "fault_distance_km": 0.61,
     "basin_id": "sun_koshi"
   },
   {
@@ -5430,7 +5430,7 @@
     "slope_deg": 60.3,
     "profile_curvature": 0.293,
     "local_relief_m": 276.4,
-    "fault_distance_km": 75.23,
+    "fault_distance_km": 8.97,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -5443,7 +5443,7 @@
     "slope_deg": 13.5,
     "profile_curvature": -0.195,
     "local_relief_m": 164.6,
-    "fault_distance_km": 4.92,
+    "fault_distance_km": 0.6,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -5469,7 +5469,7 @@
     "slope_deg": 30.5,
     "profile_curvature": 0.803,
     "local_relief_m": 155.6,
-    "fault_distance_km": 18.04,
+    "fault_distance_km": 6.98,
     "basin_id": "kali_gandaki"
   },
   {
@@ -5482,7 +5482,7 @@
     "slope_deg": 22.3,
     "profile_curvature": 0.702,
     "local_relief_m": 169.6,
-    "fault_distance_km": 53.09,
+    "fault_distance_km": 4.64,
     "basin_id": "sun_koshi"
   },
   {
@@ -5495,7 +5495,7 @@
     "slope_deg": 31.5,
     "profile_curvature": 1.141,
     "local_relief_m": 163.2,
-    "fault_distance_km": 75.54,
+    "fault_distance_km": 3.73,
     "basin_id": "karnali"
   },
   {
@@ -5508,7 +5508,7 @@
     "slope_deg": 31.0,
     "profile_curvature": -0.442,
     "local_relief_m": 186.8,
-    "fault_distance_km": 11.3,
+    "fault_distance_km": 4.67,
     "basin_id": "sun_koshi"
   },
   {
@@ -5521,7 +5521,7 @@
     "slope_deg": 27.7,
     "profile_curvature": 0.639,
     "local_relief_m": 268.9,
-    "fault_distance_km": 46.65,
+    "fault_distance_km": 11.04,
     "basin_id": "karnali"
   },
   {
@@ -5534,7 +5534,7 @@
     "slope_deg": 17.6,
     "profile_curvature": -0.039,
     "local_relief_m": 165.8,
-    "fault_distance_km": 49.33,
+    "fault_distance_km": 9.88,
     "basin_id": "karnali"
   },
   {
@@ -5547,7 +5547,7 @@
     "slope_deg": 48.4,
     "profile_curvature": -1.828,
     "local_relief_m": 278.8,
-    "fault_distance_km": 40.3,
+    "fault_distance_km": 26.97,
     "basin_id": "kali_gandaki"
   },
   {
@@ -5560,7 +5560,7 @@
     "slope_deg": 38.7,
     "profile_curvature": 1.851,
     "local_relief_m": 150.0,
-    "fault_distance_km": 4.14,
+    "fault_distance_km": 2.05,
     "basin_id": "kali_gandaki"
   },
   {
@@ -5573,7 +5573,7 @@
     "slope_deg": 35.4,
     "profile_curvature": 0.1,
     "local_relief_m": 237.4,
-    "fault_distance_km": 74.68,
+    "fault_distance_km": 13.27,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -5586,7 +5586,7 @@
     "slope_deg": 46.8,
     "profile_curvature": 0.409,
     "local_relief_m": 349.3,
-    "fault_distance_km": 60.0,
+    "fault_distance_km": 14.26,
     "basin_id": "sun_koshi"
   },
   {
@@ -5612,7 +5612,7 @@
     "slope_deg": 24.0,
     "profile_curvature": -0.806,
     "local_relief_m": 105.3,
-    "fault_distance_km": 26.91,
+    "fault_distance_km": 2.13,
     "basin_id": "karnali"
   },
   {
@@ -5625,7 +5625,7 @@
     "slope_deg": 43.9,
     "profile_curvature": 0.984,
     "local_relief_m": 242.6,
-    "fault_distance_km": 31.11,
+    "fault_distance_km": 0.49,
     "basin_id": "karnali"
   },
   {
@@ -5638,7 +5638,7 @@
     "slope_deg": 20.2,
     "profile_curvature": -0.212,
     "local_relief_m": 160.5,
-    "fault_distance_km": 35.69,
+    "fault_distance_km": 8.34,
     "basin_id": "sun_koshi"
   },
   {
@@ -5651,7 +5651,7 @@
     "slope_deg": 37.4,
     "profile_curvature": 1.628,
     "local_relief_m": 224.0,
-    "fault_distance_km": 71.13,
+    "fault_distance_km": 8.73,
     "basin_id": "karnali"
   },
   {
@@ -5664,7 +5664,7 @@
     "slope_deg": 28.4,
     "profile_curvature": -0.047,
     "local_relief_m": 108.1,
-    "fault_distance_km": 49.9,
+    "fault_distance_km": 19.81,
     "basin_id": "sun_koshi"
   },
   {
@@ -5677,7 +5677,7 @@
     "slope_deg": 23.6,
     "profile_curvature": 1.41,
     "local_relief_m": 108.5,
-    "fault_distance_km": 22.48,
+    "fault_distance_km": 16.71,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -5690,7 +5690,7 @@
     "slope_deg": 27.0,
     "profile_curvature": -0.499,
     "local_relief_m": 178.8,
-    "fault_distance_km": 23.27,
+    "fault_distance_km": 11.05,
     "basin_id": "kali_gandaki"
   },
   {
@@ -5703,7 +5703,7 @@
     "slope_deg": 13.1,
     "profile_curvature": -1.519,
     "local_relief_m": 255.7,
-    "fault_distance_km": 10.1,
+    "fault_distance_km": 2.72,
     "basin_id": "sun_koshi"
   },
   {
@@ -5716,7 +5716,7 @@
     "slope_deg": 13.5,
     "profile_curvature": -1.513,
     "local_relief_m": 110.7,
-    "fault_distance_km": 31.32,
+    "fault_distance_km": 9.66,
     "basin_id": "karnali"
   },
   {
@@ -5729,7 +5729,7 @@
     "slope_deg": 38.9,
     "profile_curvature": 0.277,
     "local_relief_m": 248.5,
-    "fault_distance_km": 40.43,
+    "fault_distance_km": 9.01,
     "basin_id": "karnali"
   },
   {
@@ -5742,7 +5742,7 @@
     "slope_deg": 10.4,
     "profile_curvature": -0.55,
     "local_relief_m": 102.3,
-    "fault_distance_km": 19.12,
+    "fault_distance_km": 2.33,
     "basin_id": "sun_koshi"
   },
   {
@@ -5755,7 +5755,7 @@
     "slope_deg": 31.9,
     "profile_curvature": 0.016,
     "local_relief_m": 201.4,
-    "fault_distance_km": 52.33,
+    "fault_distance_km": 21.3,
     "basin_id": "karnali"
   },
   {
@@ -5768,7 +5768,7 @@
     "slope_deg": 16.8,
     "profile_curvature": 1.041,
     "local_relief_m": 143.2,
-    "fault_distance_km": 77.32,
+    "fault_distance_km": 2.56,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -5781,7 +5781,7 @@
     "slope_deg": 30.0,
     "profile_curvature": 0.298,
     "local_relief_m": 203.9,
-    "fault_distance_km": 17.56,
+    "fault_distance_km": 16.62,
     "basin_id": "kali_gandaki"
   },
   {
@@ -5807,7 +5807,7 @@
     "slope_deg": 21.1,
     "profile_curvature": -0.052,
     "local_relief_m": 112.4,
-    "fault_distance_km": 26.74,
+    "fault_distance_km": 17.48,
     "basin_id": "kali_gandaki"
   },
   {
@@ -5820,7 +5820,7 @@
     "slope_deg": 22.4,
     "profile_curvature": 1.392,
     "local_relief_m": 96.8,
-    "fault_distance_km": 35.82,
+    "fault_distance_km": 11.58,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -5833,7 +5833,7 @@
     "slope_deg": 30.8,
     "profile_curvature": 0.861,
     "local_relief_m": 145.0,
-    "fault_distance_km": 47.31,
+    "fault_distance_km": 9.79,
     "basin_id": "sun_koshi"
   },
   {
@@ -5846,7 +5846,7 @@
     "slope_deg": 33.6,
     "profile_curvature": -0.505,
     "local_relief_m": 125.6,
-    "fault_distance_km": 48.55,
+    "fault_distance_km": 1.06,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -5859,7 +5859,7 @@
     "slope_deg": 6.9,
     "profile_curvature": -0.55,
     "local_relief_m": 16.0,
-    "fault_distance_km": 13.43,
+    "fault_distance_km": 6.28,
     "basin_id": "karnali"
   },
   {
@@ -5872,7 +5872,7 @@
     "slope_deg": 27.2,
     "profile_curvature": 0.353,
     "local_relief_m": 157.2,
-    "fault_distance_km": 4.4,
+    "fault_distance_km": 2.33,
     "basin_id": "kali_gandaki"
   },
   {
@@ -5885,7 +5885,7 @@
     "slope_deg": 55.7,
     "profile_curvature": -1.166,
     "local_relief_m": 543.8,
-    "fault_distance_km": 24.56,
+    "fault_distance_km": 13.98,
     "basin_id": "karnali"
   },
   {
@@ -5898,7 +5898,7 @@
     "slope_deg": 28.4,
     "profile_curvature": 0.411,
     "local_relief_m": 165.1,
-    "fault_distance_km": 17.14,
+    "fault_distance_km": 3.6,
     "basin_id": "kali_gandaki"
   },
   {
@@ -5911,7 +5911,7 @@
     "slope_deg": 22.7,
     "profile_curvature": -0.201,
     "local_relief_m": 112.7,
-    "fault_distance_km": 58.46,
+    "fault_distance_km": 10.28,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -5924,7 +5924,7 @@
     "slope_deg": 14.3,
     "profile_curvature": -0.098,
     "local_relief_m": 53.0,
-    "fault_distance_km": 43.1,
+    "fault_distance_km": 4.8,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -5937,7 +5937,7 @@
     "slope_deg": 7.8,
     "profile_curvature": 0.38,
     "local_relief_m": 68.8,
-    "fault_distance_km": 63.85,
+    "fault_distance_km": 10.06,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -5950,7 +5950,7 @@
     "slope_deg": 19.5,
     "profile_curvature": 0.24,
     "local_relief_m": 148.9,
-    "fault_distance_km": 50.73,
+    "fault_distance_km": 6.08,
     "basin_id": "kali_gandaki"
   },
   {
@@ -5963,7 +5963,7 @@
     "slope_deg": 27.1,
     "profile_curvature": 0.895,
     "local_relief_m": 167.1,
-    "fault_distance_km": 53.71,
+    "fault_distance_km": 3.33,
     "basin_id": "budhi_gandaki"
   },
   {
@@ -5976,7 +5976,7 @@
     "slope_deg": 8.7,
     "profile_curvature": 1.559,
     "local_relief_m": 107.1,
-    "fault_distance_km": 68.08,
+    "fault_distance_km": 1.87,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -5989,7 +5989,7 @@
     "slope_deg": 35.7,
     "profile_curvature": 0.315,
     "local_relief_m": 327.3,
-    "fault_distance_km": 75.61,
+    "fault_distance_km": 6.5,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -6002,7 +6002,7 @@
     "slope_deg": 29.7,
     "profile_curvature": -0.071,
     "local_relief_m": 184.2,
-    "fault_distance_km": 55.99,
+    "fault_distance_km": 0.47,
     "basin_id": "kali_gandaki"
   },
   {
@@ -6028,7 +6028,7 @@
     "slope_deg": 23.4,
     "profile_curvature": -0.421,
     "local_relief_m": 198.9,
-    "fault_distance_km": 73.59,
+    "fault_distance_km": 14.24,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -6041,7 +6041,7 @@
     "slope_deg": 9.5,
     "profile_curvature": -1.325,
     "local_relief_m": 67.2,
-    "fault_distance_km": 32.19,
+    "fault_distance_km": 0.29,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -6054,7 +6054,7 @@
     "slope_deg": 32.3,
     "profile_curvature": -0.702,
     "local_relief_m": 174.4,
-    "fault_distance_km": 20.24,
+    "fault_distance_km": 10.91,
     "basin_id": "kali_gandaki"
   },
   {
@@ -6080,7 +6080,7 @@
     "slope_deg": 50.7,
     "profile_curvature": 0.727,
     "local_relief_m": 314.8,
-    "fault_distance_km": 50.17,
+    "fault_distance_km": 24.9,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -6106,7 +6106,7 @@
     "slope_deg": 36.1,
     "profile_curvature": 0.463,
     "local_relief_m": 239.8,
-    "fault_distance_km": 24.75,
+    "fault_distance_km": 1.97,
     "basin_id": "kali_gandaki"
   },
   {
@@ -6119,7 +6119,7 @@
     "slope_deg": 28.3,
     "profile_curvature": 0.686,
     "local_relief_m": 170.9,
-    "fault_distance_km": 49.19,
+    "fault_distance_km": 5.52,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -6145,7 +6145,7 @@
     "slope_deg": 34.5,
     "profile_curvature": 0.36,
     "local_relief_m": 254.3,
-    "fault_distance_km": 19.21,
+    "fault_distance_km": 18.87,
     "basin_id": "karnali"
   },
   {
@@ -6171,7 +6171,7 @@
     "slope_deg": 42.9,
     "profile_curvature": 0.241,
     "local_relief_m": 233.5,
-    "fault_distance_km": 4.24,
+    "fault_distance_km": 1.59,
     "basin_id": "kali_gandaki"
   },
   {
@@ -6184,7 +6184,7 @@
     "slope_deg": 32.8,
     "profile_curvature": 0.125,
     "local_relief_m": 146.9,
-    "fault_distance_km": 47.91,
+    "fault_distance_km": 16.82,
     "basin_id": "bagmati_narayani"
   },
   {
@@ -6197,7 +6197,7 @@
     "slope_deg": 20.8,
     "profile_curvature": 0.16,
     "local_relief_m": 138.2,
-    "fault_distance_km": 70.33,
+    "fault_distance_km": 2.79,
     "basin_id": "sun_koshi"
   },
   {
@@ -6223,7 +6223,7 @@
     "slope_deg": 29.8,
     "profile_curvature": -0.05,
     "local_relief_m": 288.3,
-    "fault_distance_km": 47.21,
+    "fault_distance_km": 0.98,
     "basin_id": "sapta_koshi_kanchenjunga"
   },
   {
@@ -6236,7 +6236,7 @@
     "slope_deg": 19.9,
     "profile_curvature": 0.493,
     "local_relief_m": 128.7,
-    "fault_distance_km": 46.3,
+    "fault_distance_km": 4.49,
     "basin_id": "karnali"
   },
   {
@@ -6262,7 +6262,7 @@
     "slope_deg": 34.6,
     "profile_curvature": 0.593,
     "local_relief_m": 245.4,
-    "fault_distance_km": 68.83,
+    "fault_distance_km": 0.6,
     "basin_id": "sun_koshi"
   },
   {
@@ -6275,7 +6275,7 @@
     "slope_deg": 6.2,
     "profile_curvature": 0.55,
     "local_relief_m": 106.2,
-    "fault_distance_km": 68.42,
+    "fault_distance_km": 4.43,
     "basin_id": "sun_koshi"
   },
   {
@@ -6301,7 +6301,7 @@
     "slope_deg": 28.5,
     "profile_curvature": 0.289,
     "local_relief_m": 152.1,
-    "fault_distance_km": 40.61,
+    "fault_distance_km": 6.0,
     "basin_id": "kali_gandaki"
   },
   {
@@ -6314,7 +6314,7 @@
     "slope_deg": 28.8,
     "profile_curvature": -0.288,
     "local_relief_m": 245.4,
-    "fault_distance_km": 71.85,
+    "fault_distance_km": 6.52,
     "basin_id": "sun_koshi"
   },
   {
@@ -6340,7 +6340,7 @@
     "slope_deg": 44.8,
     "profile_curvature": 1.871,
     "local_relief_m": 245.6,
-    "fault_distance_km": 22.57,
+    "fault_distance_km": 13.24,
     "basin_id": "kali_gandaki"
   },
   {
@@ -6353,7 +6353,7 @@
     "slope_deg": 31.8,
     "profile_curvature": -0.502,
     "local_relief_m": 167.0,
-    "fault_distance_km": 67.1,
+    "fault_distance_km": 8.94,
     "basin_id": "sun_koshi"
   },
   {
@@ -6366,7 +6366,7 @@
     "slope_deg": 11.6,
     "profile_curvature": 0.63,
     "local_relief_m": 124.0,
-    "fault_distance_km": 44.66,
+    "fault_distance_km": 0.92,
     "basin_id": "sun_koshi"
   },
   {

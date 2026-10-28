@@ -215,12 +215,24 @@ def parse_slip_rate(raw: Any) -> Optional[Dict[str, float]]:
 
 
 class Source:
-    """One upstream fault dataset, with the fields needed to attribute every trace."""
+    """One upstream fault dataset, with the fields needed to attribute every trace.
+
+    ``kind`` is ``"geojson"`` for a plain FeatureCollection, or ``"shapefile_zip"`` for a
+    zipped set of ESRI shapefiles read through GDAL's ``/vsizip/``.
+
+    ``layer_identity`` matters for the shapefile case and is deliberately separate from
+    the attribute fields. Some published compilations name a fault only by the FILE it
+    lives in - there is no name column to read. Mapping a filename to a fault is an act
+    of interpretation, not a measurement, so it is declared here and recorded on every
+    feature as ``identity_from`` rather than being passed off as source data.
+    """
 
     def __init__(self, key: str, url: str, licence: str, note: str,
-                 name_field: str, type_field: str,
+                 name_field: Optional[str] = None, type_field: Optional[str] = None,
                  slip_field: Optional[str] = None,
-                 reference_field: Optional[str] = None) -> None:
+                 reference_field: Optional[str] = None,
+                 kind: str = "geojson",
+                 layer_identity: Optional[Dict[str, Tuple[str, str]]] = None) -> None:
         self.key = key
         self.url = url
         self.licence = licence
@@ -229,6 +241,8 @@ class Source:
         self.type_field = type_field
         self.slip_field = slip_field
         self.reference_field = reference_field
+        self.kind = kind
+        self.layer_identity = layer_identity or {}
 
 
 SOURCES: Dict[str, Source] = {
@@ -250,6 +264,26 @@ SOURCES: Dict[str, Source] = {
         note="Suture zones. Structural boundaries, not active seismogenic sources.",
         name_field="Name", type_field="Type", reference_field="Source",
     ),
+    "whipple_himalaya": Source(
+        key="whipple_himalaya",
+        kind="shapefile_zip",
+        url="https://download.pangaea.de/dataset/969013/files/Geology_shapefiles.zip",
+        licence="CC-BY-4.0. Cite Whipple, Adams, Forte & Hodges (2024), "
+                "doi:10.1594/PANGAEA.969013; companion paper doi:10.1086/731260",
+        note=("The only located source carrying the Main Boundary Thrust and Main "
+              "Central Thrust as line geometry. IMPORTANT: these shapefiles have NO "
+              "name attribute - the only columns are Id, ltype (a cartographic "
+              "line-type code) and Shape_Leng. A fault's identity comes from the "
+              "FILENAME, so every feature is marked identity_from='source filename'."),
+        layer_identity={
+            # stem -> (fault name, structure class). Declared, not read from the file.
+            "MBT": ("Main Boundary Thrust", THRUST_SYSTEM),
+            "MCT": ("Main Central Thrust", THRUST_SYSTEM),
+            "MFT": ("Main Frontal Thrust", THRUST_SYSTEM),
+            "MT": ("Munsiari Thrust", THRUST_SYSTEM),
+            "STD": ("South Tibetan Detachment", EXTENSIONAL),
+        },
+    ),
     "gem": Source(
         key="gem",
         url="https://raw.githubusercontent.com/GEMScienceTools/gem-global-active-faults/master/geojson/gem_active_faults_harmonized.geojson",
@@ -265,7 +299,8 @@ SOURCES: Dict[str, Source] = {
 
 
 def cache_path(key: str) -> Path:
-    return CACHE_DIR / f"{key}.geojson"
+    suffix = "zip" if SOURCES[key].kind == "shapefile_zip" else "geojson"
+    return CACHE_DIR / f"{key}.{suffix}"
 
 
 def fetch_source(key: str, refresh: bool = False, timeout: int = 180) -> Path:
@@ -283,7 +318,10 @@ def fetch_source(key: str, refresh: bool = False, timeout: int = 180) -> Path:
     req = urllib.request.Request(src.url, headers={"User-Agent": "Himalayan-MHEWS/1.0"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
         payload = resp.read()
-    json.loads(payload.decode("utf-8"))  # parse before committing to the cache
+    if src.kind == "geojson":
+        json.loads(payload.decode("utf-8"))  # parse before committing to the cache
+    elif not payload.startswith(b"PK"):
+        raise ValueError(f"{key}: expected a zip archive, got {payload[:16]!r}")
     tmp.write_bytes(payload)
     tmp.replace(path)
     return path
@@ -331,10 +369,68 @@ def _signature(geom: Optional[Dict[str, Any]]) -> Optional[str]:
 
 
 
+def _load_shapefile_zip(src: Source, window: Tuple[float, float, float, float],
+                        refresh: bool) -> List[Dict[str, Any]]:
+    """Read the line layers of a zipped shapefile set through GDAL's /vsizip/.
+
+    Only layers named in ``src.layer_identity`` are taken. A layer this module cannot
+    name is skipped rather than imported as an anonymous "fault": an unnamed trace that
+    silently shortens somebody's distance-to-fault is exactly the kind of unattributable
+    input this project refuses.
+    """
+    import zipfile
+
+    import pyogrio
+
+    path = fetch_source(src.key, refresh=refresh)
+    # Enumerate the archive directly. list_layers() on the zip root fails when the
+    # shapefiles sit in a subdirectory, which is how this archive is laid out.
+    with zipfile.ZipFile(path) as zf:
+        members = [n for n in zf.namelist() if n.lower().endswith(".shp")]
+
+    out: List[Dict[str, Any]] = []
+    for member in sorted(members):
+        stem = member.rsplit("/", 1)[-1][:-4]
+        if stem not in src.layer_identity:
+            continue
+        fault_name, structure_class = src.layer_identity[stem]
+        gdf = pyogrio.read_dataframe(f"/vsizip/{path}/{member}")
+        if gdf.crs is not None and gdf.crs.to_epsg() != 4326:
+            gdf = gdf.to_crs(4326)
+        for geom in gdf.geometry:
+            if geom is None or geom.is_empty:
+                continue
+            gj = geom.__geo_interface__
+            if not _line_parts(gj) or not _in_window(gj, window):
+                continue
+            out.append({
+                "type": "Feature",
+                "geometry": json.loads(json.dumps(gj)),
+                "properties": {
+                    "fault_name": fault_name,
+                    "structure_class": structure_class,
+                    "source_type": stem,
+                    "slip_rate": None,
+                    "reference": "Whipple, Adams, Forte & Hodges (2024)",
+                    "source": src.key,
+                    "source_url": src.url,
+                    "licence": src.licence,
+                    "identity_from": (
+                        "source filename - these shapefiles carry no name attribute, "
+                        "so the fault's identity is an interpretation of which file it "
+                        "was published in, not a value read from the data"
+                    ),
+                },
+            })
+    return out
+
+
 def load_source_features(key: str, window: Tuple[float, float, float, float] = NEPAL_WINDOW,
                          refresh: bool = False) -> List[Dict[str, Any]]:
     """Fetch a source and return its line features inside the window, normalised."""
     src = SOURCES[key]
+    if src.kind == "shapefile_zip":
+        return _load_shapefile_zip(src, window, refresh)
     path = fetch_source(key, refresh=refresh)
     raw = json.loads(path.read_text(encoding="utf-8"))
     out: List[Dict[str, Any]] = []
@@ -390,6 +486,14 @@ def build_nepal_fault_layer(
                 seen[sig] = key
             features.append(feat)
 
+    #: Faults whose presence is load-bearing for the Himalayan thrust-distance term.
+    #: Checked against what actually landed in the layer rather than asserted.
+    EXPECTED = {
+        "Main Frontal Thrust": "MFT",
+        "Main Boundary Thrust": "MBT",
+        "Main Central Thrust": "MCT",
+    }
+
     classes: Dict[str, int] = {}
     named: Dict[str, int] = {}
     with_slip = 0
@@ -400,6 +504,10 @@ def build_nepal_fault_layer(
             named[p["fault_name"]] = named.get(p["fault_name"], 0) + 1
         if p.get("slip_rate"):
             with_slip += 1
+
+    expected = {label: named.get(full, 0) for full, label in EXPECTED.items()}
+    absent = [f"{full} ({label})" for full, label in EXPECTED.items()
+              if named.get(full, 0) == 0]
 
     return {
         "type": "FeatureCollection",
@@ -417,16 +525,12 @@ def build_nepal_fault_layer(
             "named_faults": named,
             "with_slip_rate": with_slip,
             "duplicates_dropped": duplicates,
-            "known_absent": [
-                "Main Boundary Thrust (MBT)",
-                "Main Central Thrust (MCT)",
-            ],
+            "expected_faults": {k: v for k, v in expected.items()},
+            "known_absent": absent,
             "absence_note": (
-                "MBT and MCT are absent from every source merged here, confirmed by "
-                "exhaustive string search. They run through the Lesser and Higher "
-                "Himalaya where the monitored corridors sit, so the thrust-distance "
-                "column remains ~89-117 km per corridor and the fault-damage term "
-                "stays saturated for them. This is a recorded gap, not a solved one."
+                "Faults listed in known_absent are not present in any source merged "
+                "here. This block is DERIVED from the built layer on every run, never "
+                "hardcoded, so it cannot go stale when a source is added or removed."
             ),
         },
         "features": features,
