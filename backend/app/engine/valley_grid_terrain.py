@@ -51,6 +51,8 @@ from typing import Any, Dict, List, Optional, Tuple
 logger = logging.getLogger("nepal_mhews.valley_grid_terrain")
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+# Legacy single-file cache. Superseded by GRID_DIR (one .npz per corridor); kept only
+# so convert_grid_to_npz.py can find and migrate an older build.
 GRID_CACHE = DATA_DIR / "valley_grid_terrain.json"
 
 DEM_TILE = ("/vsicurl/https://copernicus-dem-30m.s3.amazonaws.com/"
@@ -280,27 +282,110 @@ def _attach_road_exposure(cells, road_index, radius_m: float) -> None:
             cell.exposure = "ROAD"
 
 
+GRID_DIR = DATA_DIR / "valley_grid_terrain"
+
+_NUMERIC_FIELDS = ("lat", "lon", "elevation_m", "slope_deg", "aspect_deg",
+                   "local_relief_m", "profile_curvature", "road_distance_m",
+                   "distance_to_river_m", "fault_distance_km",
+                   "settlement_distance_m", "hydro_distance_m",
+                   "clay_fraction", "sand_fraction", "coarse_rock_fraction",
+                   "dry_bulk_density_g_cm3", "row", "col")
+_TEXT_FIELDS = ("road_class", "settlement_name", "settlement_kind",
+                "hydro_name", "exposure")
+
+
 def save_grid(grids: Dict[str, List[TerrainCell]], path: Optional[Path] = None) -> None:
-    path = Path(path or GRID_CACHE)
-    payload = {cid: [c.to_dict() for c in cells] for cid, cells in grids.items()}
-    tmp = path.with_suffix(".json.tmp")
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(payload, fh)
-    tmp.replace(path)
+    """Write each corridor as a columnar .npz.
+
+    One JSON file for every corridor was the obvious first choice and the wrong one:
+    the cache reached 52 MB with three corridors loaded and would pass 300 MB with all
+    seven, so a single request that wanted Langtang parsed Karnali's 198,554 cells to
+    get at it - about 4 s of JSON parsing per cold request, and a memory spike well
+    past the array data it produced.
+
+    Columnar npz loads the arrays the physics actually wants, per corridor, in
+    milliseconds, and stores float columns as float32 - 240 m cells do not carry seven
+    significant figures. Absent values stay absent as NaN rather than becoming a number.
+    """
+    import numpy as np
+
+    base = Path(path) if path else GRID_DIR
+    base.mkdir(parents=True, exist_ok=True)
+    for cid, cells in grids.items():
+        cols: Dict[str, Any] = {}
+        for f in _NUMERIC_FIELDS:
+            cols[f] = np.array(
+                [(getattr(c, f, None) if getattr(c, f, None) is not None else np.nan)
+                 for c in cells], dtype=np.float32)
+        for f in _TEXT_FIELDS:
+            cols[f] = np.array([(getattr(c, f, None) or "") for c in cells], dtype=object)
+        # The temp name must itself end in .npz: savez_compressed appends the suffix
+        # when the path lacks it, so "<cid>.npz.tmp" is silently written as
+        # "<cid>.npz.tmp.npz" and the rename then fails on a missing file.
+        tmp = base / f".{cid}.partial.npz"
+        np.savez_compressed(tmp, **cols)
+        tmp.replace(base / f"{cid}.npz")
 
 
-def load_grid(path: Optional[Path] = None) -> Dict[str, List[Dict[str, Any]]]:
-    """The cached real grid, or {} when it has not been built yet.
+def load_corridor(corridor_id: str, path: Optional[Path] = None) -> Dict[str, Any]:
+    """Columns for one corridor, or {} when it has not been built.
 
     Returning {} rather than a generated stand-in is deliberate: a caller that finds no
     grid must say so, not draw one.
     """
-    try:
-        with open(Path(path or GRID_CACHE), "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-        return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
+    import numpy as np
+
+    base = Path(path) if path else GRID_DIR
+    f = base / f"{corridor_id}.npz"
+    if not f.exists():
         return {}
+    try:
+        with np.load(f, allow_pickle=True) as z:
+            return {k: z[k] for k in z.files}
+    except (OSError, ValueError) as exc:
+        logger.warning("grid for %s unreadable: %s", corridor_id, exc)
+        return {}
+
+
+def built_corridors(path: Optional[Path] = None) -> List[str]:
+    base = Path(path) if path else GRID_DIR
+    if not base.exists():
+        return []
+    return sorted(p.stem for p in base.glob("*.npz"))
+
+
+def corridor_cell_count(corridor_id: str, path: Optional[Path] = None) -> int:
+    cols = load_corridor(corridor_id, path)
+    return int(cols["lat"].size) if cols else 0
+
+
+def load_grid(path: Optional[Path] = None) -> Dict[str, List[Dict[str, Any]]]:
+    """Every built corridor as row dicts.
+
+    Kept for the build script and tests, which do want whole corridors as objects.
+    Request paths should call :func:`load_corridor` instead and stay columnar.
+    """
+    import numpy as np
+
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for cid in built_corridors(path):
+        cols = load_corridor(cid, path)
+        if not cols:
+            continue
+        n = int(cols["lat"].size)
+        rows = []
+        for i in range(n):
+            row: Dict[str, Any] = {"corridor_id": cid}
+            for f in _NUMERIC_FIELDS:
+                v = float(cols[f][i])
+                row[f] = None if np.isnan(v) else (int(v) if f in ("row", "col") else v)
+            for f in _TEXT_FIELDS:
+                v = str(cols[f][i])
+                row[f] = v or None
+            row["exposure"] = row.get("exposure") or "TERRAIN_ONLY"
+            rows.append(row)
+        out[cid] = rows
+    return out
 
 
 # --------------------------------------------------------------------------------------

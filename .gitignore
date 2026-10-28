@@ -40,3 +40,4 @@ backend/logs/
 # to hundreds of MB across the corridors, so it is derived data, not source.
 backend/data/valley_grid_terrain.json
 backend/data/valley_grid_terrain.json.tmp
+backend/data/valley_grid_terrain/

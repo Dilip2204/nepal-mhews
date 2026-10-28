@@ -13,7 +13,7 @@ This script replaces that with measurements, cached once:
 
     Copernicus DEM GLO-30  ->  elevation, slope, aspect, profile curvature, local relief
     SoilGrids v2.0 (ISRIC) ->  clay, sand, coarse fragments, bulk density (30-200 cm)
-    OpenStreetMap          ->  nearest road + class, nearest river, nearest settlement
+    OpenStreetMap          ->  nearest road + class, river, settlement, dam/plant
     GEM Global Active Faults -> distance to the nearest mapped active fault trace
 
 Scope
@@ -82,7 +82,6 @@ def main() -> int:
     print(f"  {len(road_index[1])} highway ways in {time.time()-t0:.0f}s", flush=True)
 
     grids = {}
-    existing = vgt.load_grid(args.out)
     for cid in wanted:
         meta = PRIMARY_CORRIDORS[cid]
         print(f"\n=== {cid}  bbox={meta.bbox} ===", flush=True)
@@ -109,6 +108,10 @@ def main() -> int:
         vgt.attach_rivers_and_settlements(cells, args.pbf)
         print(f"  rivers/places     attached    {time.time()-t0:6.1f}s", flush=True)
 
+        t0 = time.time()
+        nh = vgt.attach_hydro_infrastructure(cells, args.pbf)
+        print(f"  hydro    {nh:7d} near dam/plant {time.time()-t0:6.1f}s", flush=True)
+
         from collections import Counter
         exp = Counter(c.exposure for c in cells)
         have_soil = sum(1 for c in cells if c.clay_fraction is not None)
@@ -116,17 +119,17 @@ def main() -> int:
         print(f"  -> soil resolved {have_soil}/{len(cells)} "
               f"({100.0*have_soil/len(cells):.0f}%)", flush=True)
 
-        grids[cid] = cells
+        grids[cid] = len(cells)
         # Persist after every corridor: a 20-minute run should not lose everything to a
-        # transient /vsicurl failure on the last one. Merge with what is already on disk
-        # so a --corridors subset run never deletes the others.
-        merged = {k: v for k, v in existing.items() if k not in grids}
-        vgt.save_grid({**{k: [vgt.TerrainCell(**c) for c in v] for k, v in merged.items()},
-                       **grids}, args.out)
+        # transient /vsicurl failure on the last one. Storage is one file per corridor,
+        # so this writes only what just changed and a --corridors subset run cannot
+        # disturb the others.
+        vgt.save_grid({cid: cells}, args.out)
+        del cells
 
-    total = sum(len(v) for v in grids.values())
+    total = sum(grids.values())
     print(f"\nbuilt {total} real cells across {len(grids)} corridors -> "
-          f"{args.out or vgt.GRID_CACHE}", flush=True)
+          f"{args.out or vgt.GRID_DIR}", flush=True)
     return 0
 
 

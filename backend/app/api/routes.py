@@ -552,6 +552,14 @@ def get_valley_grid_cells(
     eff_api = api_30d_mm if api_30d_mm is not None else float(live_telem["api_30d_mm"])
     eff_kh = seismic_kh if seismic_kh is not None else float(live_telem["seismic_kh"])
 
+    view = None
+    if bbox:
+        try:
+            w, s_, e, n = (float(v) for v in bbox.split(","))
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="bbox must be 'min_lon,min_lat,max_lon,max_lat'")
+        view = (w, s_, e, n)
+
     try:
         cells = valley_grid_service.evaluate_corridor_grid(
             corridor_id=corridor_id,
@@ -559,28 +567,19 @@ def get_valley_grid_cells(
             api_30d_mm=eff_api,
             seismic_kh=eff_kh,
             asset_type=asset_type,
+            bbox=view,
+            exposed_only=(exposure != "all"),
+            limit=limit,
         )
     except FileNotFoundError as exc:
         # The grid is measured and cached, never generated on demand. If it is missing
         # we say so; we do not substitute anything for it.
         raise HTTPException(status_code=503, detail=str(exc))
 
-    total_evaluated = len(cells)
-    if exposure != "all":
-        cells = [c for c in cells if c.get("asset_type") != "HILLSLOPE"]
-    if bbox:
-        try:
-            w, s_, e, n = (float(v) for v in bbox.split(","))
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=400, detail="bbox must be 'min_lon,min_lat,max_lon,max_lat'")
-        cells = [c for c in cells
-                 if w <= c["longitude"] <= e and s_ <= c["latitude"] <= n]
-    after_filters = len(cells)
-    truncated = after_filters > limit
-    if truncated:
-        # Keep the most hazardous cells, not an arbitrary prefix - a cap that silently
-        # dropped the RED cells would be worse than no cap at all.
-        cells = sorted(cells, key=lambda c: c["fs"])[:limit]
+    sel = getattr(valley_grid_service, "_last_selection", {})
+    total_evaluated = sel.get("evaluated", len(cells))
+    after_filters = sel.get("after_filters", len(cells))
+    truncated = sel.get("truncated", False)
 
     fs_vals = [c["fs"] for c in cells]
     alert_counts = {"RED": 0, "ORANGE": 0, "YELLOW": 0, "GREEN": 0}

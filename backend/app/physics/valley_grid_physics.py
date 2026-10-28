@@ -341,219 +341,29 @@ PRIMARY_CORRIDORS: Dict[str, CorridorMetadata] = {
 
 
 # --------------------------------------------------------------------------------------
-# Ground-truth human settlements, highway road-cuts, and critical infrastructure assets
+# Human exposure is MEASURED now, not listed here.
+#
+# A 211-line CORRIDOR_HUMAN_ASSETS table used to sit at this point: ~140 hand-authored
+# places carrying unsourced population figures ("2,500 residents", "4,200 residents")
+# and prose asserting slope angles - "32 deg colluvial hillslope", "34 deg weathered
+# schist" - for terrain nothing had measured. The generator sampled it with
+# rng.integers() and scattered cells around the picked entry, so those descriptions
+# were the only thing standing in for topography.
+#
+# It fed nothing once the grid became real, and it is removed rather than left in
+# place, because a dead table of plausible numbers is the thing most likely to get
+# wired back in. The equivalent now comes from sources, per cell, in
+# app/engine/valley_grid_terrain.py:
+#
+#     settlement name, kind and distance   OpenStreetMap place=city|town|village|hamlet
+#     road distance and class              OpenStreetMap highway=*
+#     dam / powerhouse distance and name   OpenStreetMap waterway=dam|weir, power=plant
+#     slope, aspect, curvature, relief     Copernicus DEM GLO-30
+#
+# Population per settlement is still absent - OSM population tags are sparse in Nepal
+# and were not used rather than guessed. Nepal CBS ward-level census figures are the
+# real source if that metric is wanted; it is not invented in the meantime.
 # --------------------------------------------------------------------------------------
-CORRIDOR_HUMAN_ASSETS: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
-    "langtang": {
-        "SETTLEMENT": [
-            {"name": "Dhunche District HQ & Hospital", "lat": 28.112, "lon": 85.297, "elev": 1960.0, "pop": "4,200 residents", "desc": "Dense district administrative center on 32° colluvial hillslope above highway"},
-            {"name": "Syabrubesi Choke Point & Bazaars", "lat": 28.161, "lon": 85.337, "elev": 1460.0, "pop": "2,500 residents", "desc": "Confluence settlement and commercial transport hub vulnerable to debris flows"},
-            {"name": "Kyangjin Gompa Alpine Village", "lat": 28.212, "lon": 85.568, "elev": 3870.0, "pop": "350 seasonal residents / trekkers", "desc": "High-altitude glacial valley settlement directly in runout path of cirque avalanches"},
-            {"name": "Gatlang Heritage Village (Tamang Heritage)", "lat": 28.140, "lon": 85.265, "elev": 2238.0, "pop": "1,800 residents", "desc": "Traditional tiered hillside stone settlements situated on steep 34° weathered schist slope"},
-            {"name": "Thuman & Briddhim Hillside Wards", "lat": 28.195, "lon": 85.365, "elev": 2280.0, "pop": "1,200 residents", "desc": "Mid-slope terraced agricultural settlements on active colluvial slope"},
-            {"name": "Timure Border Customs Town", "lat": 28.275, "lon": 85.378, "elev": 1762.0, "pop": "1,500 residents", "desc": "Border dry-port settlement squeezed in narrow gorge beneath vertical cliffs"},
-            {"name": "Langtang Village Memorial Bench", "lat": 28.215, "lon": 85.502, "elev": 3430.0, "pop": "250 residents / lodges", "desc": "Rebuilt settlement on 2015 co-seismic rock-ice avalanche debris field"},
-        ],
-        "HIGHWAY_ROADCUT": [
-            {"name": "Pasang Lhamu Highway (Betrawati-Ramche Cliff Cut)", "lat": 28.085, "lon": 85.250, "elev": 1350.0, "traffic": "2,800 veh/day", "desc": "Deep engineered road-cut in fractured phyllite with chronic monsoon rockfalls"},
-            {"name": "Pasang Lhamu Highway (Ramche-Dhunche Switchbacks)", "lat": 28.105, "lon": 85.285, "elev": 1820.0, "traffic": "2,500 veh/day", "desc": "Steep climbing hairpins oversteepened by excavation across fault-damaged bedrock"},
-            {"name": "Pasang Lhamu Highway (Syabrubesi-Timure Gorge Route)", "lat": 28.220, "lon": 85.355, "elev": 1620.0, "traffic": "3,200 veh/day (Cross-border freight)", "desc": "China-Nepal arterial transit corridor vulnerable to toe undercutting and rock bursts"},
-            {"name": "Chilime Hydropower Access Road", "lat": 28.180, "lon": 85.310, "elev": 1750.0, "traffic": "450 veh/day", "desc": "Mountain industrial road cut into steep 46° colluvium"},
-        ],
-        "HYDRO_INFRASTRUCTURE": [
-            {"name": "Upper Trishuli-1 Hydro Dam & Intake Portal", "lat": 28.175, "lon": 85.342, "elev": 1420.0, "metric": "216 MW Mega Hydro", "desc": "Major national infrastructure; dam headworks located in high-relief V-shaped gorge"},
-            {"name": "Chilime Hydropower Powerhouse & Switchyard", "lat": 28.170, "lon": 85.305, "elev": 1580.0, "metric": "22 MW Hydro Facility", "desc": "Substation and penstock exposed to hillside boulders and debris cascades"},
-            {"name": "Upper Trishuli-3A Headworks & Penstocks", "lat": 28.055, "lon": 85.215, "elev": 950.0, "metric": "60 MW Hydropower", "desc": "Headworks downstream vulnerable to upstream landslide dam surge breaches"},
-            {"name": "Syabrubesi Motor Bridge & Suspension Crossing", "lat": 28.163, "lon": 85.339, "elev": 1450.0, "metric": "Strategic Highway Bridge", "desc": "Critical river crossing connecting central Nepal to northern border"},
-        ],
-        "RIVER_GORGE": [
-            {"name": "Trishuli River Deep Canyon Flank", "lat": 28.130, "lon": 85.315, "elev": 1380.0, "metric": "Active Fluvial Toe", "desc": "Monsoon river torrent undercutting toe of unstable valley wall colluvium"},
-            {"name": "Langtang Khola Boulder Cascade Gorge", "lat": 28.210, "lon": 85.450, "elev": 2950.0, "metric": "Debris Routing Axis", "desc": "High-velocity debris flow channel from alpine catchments"},
-        ],
-        "CRYOSPHERE_GLACIAL": [
-            {"name": "Langtang Lirung Hanging Glacier & Cirque", "lat": 28.232, "lon": 85.518, "elev": 5680.0, "metric": "7227m Peak Avalanche Wall", "desc": "Source of catastrophic 2015 rock-ice avalanche; high thermal melt detachment risk"},
-            {"name": "Shalbachum Proglacial Moraine Wall", "lat": 28.258, "lon": 85.582, "elev": 5380.0, "metric": "GLOF Hazard Lake", "desc": "Moraine-dammed glacial lake subject to ice avalanche impact wave breach"},
-        ],
-    },
-    "budhi_gandaki": {
-        "SETTLEMENT": [
-            {"name": "Barpak Epicenter Town (Gorkha)", "lat": 28.200, "lon": 84.750, "elev": 1900.0, "pop": "5,000 residents", "desc": "Densely inhabited ridge settlement situated on 2015 earthquake epicenter rupture zone"},
-            {"name": "Laprak Hillside Settlement", "lat": 28.225, "lon": 84.780, "elev": 2100.0, "pop": "2,800 residents", "desc": "Steep slope village vulnerable to deep colluvial sliding during monsoon"},
-            {"name": "Samagaun (Manaslu Base Hub)", "lat": 28.583, "lon": 84.633, "elev": 3530.0, "pop": "800 residents / climbers", "desc": "High alpine glacial valley community beneath Manaslu icefall hazard cone"},
-            {"name": "Lho Village & Monastery", "lat": 28.562, "lon": 84.693, "elev": 3180.0, "pop": "650 residents", "desc": "Perched terrace community on steep metamorphic morainic veneer"},
-            {"name": "Namrung Gorge Settlement", "lat": 28.544, "lon": 84.752, "elev": 2660.0, "pop": "450 residents", "desc": "Narrow gorge neck subject to rockfall chutes and river damming"},
-            {"name": "Philim Gorge Choke Point Town", "lat": 28.261, "lon": 84.898, "elev": 1570.0, "pop": "1,800 residents", "desc": "Strategic valley choke point with schools and homes beneath near-vertical schist cliffs"},
-            {"name": "Arughat Bazar Commercial Center", "lat": 28.120, "lon": 84.819, "elev": 600.0, "pop": "6,500 residents", "desc": "Primary regional commercial hub on river terrace vulnerable to GLOF surge waves"},
-        ],
-        "HIGHWAY_ROADCUT": [
-            {"name": "Gorkha-Barpak Ridge Access Road", "lat": 28.180, "lon": 84.710, "elev": 1650.0, "traffic": "1,400 veh/day", "desc": "Excavated earthen road-cuts traversing sheared Gorkha thrust fault rocks"},
-            {"name": "Benighat-Arughat Corridor Cut-Slopes", "lat": 28.115, "lon": 84.820, "elev": 720.0, "traffic": "2,100 veh/day", "desc": "High traffic transport link with toe excavation destabilizing slope batters"},
-            {"name": "Arughat-Soti Khola Cliff Alignment", "lat": 28.150, "lon": 84.822, "elev": 680.0, "traffic": "850 veh/day", "desc": "Single-lane cliffside cut oversteepened above churning river"},
-            {"name": "Philim Army Road-Cut Trail", "lat": 28.270, "lon": 84.890, "elev": 1620.0, "traffic": "400 mules/veh daily", "desc": "Blasted rock-shelf alignment vulnerable to rock wedges and joint release"},
-        ],
-        "HYDRO_INFRASTRUCTURE": [
-            {"name": "Budhi Gandaki Dam Site & Diversion Axis", "lat": 28.140, "lon": 84.830, "elev": 620.0, "metric": "1200 MW National Project", "desc": "Proposed mega reservoir dam axis in steep rock gorge"},
-            {"name": "Philim Strategic Suspension Bridge", "lat": 28.263, "lon": 84.895, "elev": 1550.0, "metric": "Lifeline River Crossing", "desc": "Key suspension span linking northern Manaslu communities"},
-            {"name": "Barpak Reconstruction Medical Center", "lat": 28.202, "lon": 84.752, "elev": 1890.0, "metric": "Essential Public Facility", "desc": "Critical community hospital facility situated on colluvial bench"},
-        ],
-        "RIVER_GORGE": [
-            {"name": "Budhi Gandaki Canyon Choke Point", "lat": 28.315, "lon": 84.725, "elev": 1450.0, "metric": "Landslide Dam Choke Point", "desc": "Narrow gorge neck where slope failure easily dams the main river"},
-            {"name": "Soti Khola Canyon Toe Undercut", "lat": 28.190, "lon": 84.830, "elev": 730.0, "metric": "Fluvial Undercut Bank", "desc": "Rapid river incision causing periodic toe collapse"},
-        ],
-        "CRYOSPHERE_GLACIAL": [
-            {"name": "Manaslu Cirque Icefall (8163m)", "lat": 28.596, "lon": 84.636, "elev": 5800.0, "metric": "8163m Peak Glacial Shelf", "desc": "Massive hanging serac field capable of triggering catastrophic ice avalanches"},
-            {"name": "Birendra Tal Moraine Dam Outlet", "lat": 28.590, "lon": 84.630, "elev": 4620.0, "metric": "Proglacial Lake Basin", "desc": "Glacial lake at base of Manaslu; site of April 2024 surge overflow"},
-            {"name": "Thulagi (Dona) Glacial Lake Moraine", "lat": 28.538, "lon": 84.505, "elev": 5120.0, "metric": "High-Risk GLOF Waterbody", "desc": "Large moraine-dammed lake with documented piping and hydrostatic pressure risk"},
-        ],
-    },
-    "kali_gandaki": {
-        "SETTLEMENT": [
-            {"name": "Jomsom Airport Town & Administrative HQ", "lat": 28.780, "lon": 83.725, "elev": 2720.0, "pop": "3,200 residents / tourists", "desc": "Mustang district center, airstrip, and transit corridor on arid alluvial fan"},
-            {"name": "Marpha Heritage Apple Village", "lat": 28.750, "lon": 83.685, "elev": 2650.0, "pop": "1,600 residents", "desc": "Historic stone town on toe of massive ancient colluvial paleolandslide"},
-            {"name": "Tatopani Hot Springs Community", "lat": 28.495, "lon": 83.655, "elev": 1190.0, "pop": "1,200 residents", "desc": "Gorge bottom tourist town between Annapurna and Dhaulagiri cliff faces"},
-            {"name": "Beni Bazar Commercial Hub (Myagdi HQ)", "lat": 28.345, "lon": 83.565, "elev": 830.0, "pop": "14,000 residents", "desc": "Major district urban center at confluence of Kali Gandaki and Myagdi Khola"},
-            {"name": "Dana Hillside Village", "lat": 28.540, "lon": 83.650, "elev": 1440.0, "pop": "1,100 residents", "desc": "Agricultural community on steep terraces opposite Rupse waterfall gorge"},
-            {"name": "Ghasa Choke Settlement", "lat": 28.605, "lon": 83.645, "elev": 2010.0, "pop": "950 residents", "desc": "Mustang-Myagdi border settlement perched above narrowest gorge incision"},
-            {"name": "Kagbeni Sacred Confluence Village", "lat": 28.835, "lon": 83.780, "elev": 2800.0, "pop": "1,300 residents", "desc": "Gateway to Upper Mustang on gravel terrace subject to debris outwash"},
-        ],
-        "HIGHWAY_ROADCUT": [
-            {"name": "Kali Gandaki Highway (Rupse Chhahara Cliff Cut)", "lat": 28.520, "lon": 83.652, "elev": 1380.0, "traffic": "2,400 veh/day", "desc": "Carved into sheer gneiss cliffs with recurrent monsoon debris sweeps"},
-            {"name": "Beni-Tatopani Highway Cut-Slopes", "lat": 28.420, "lon": 83.600, "elev": 980.0, "traffic": "3,100 veh/day", "desc": "Arterial road oversteepened by excavation across fragile phyllitic scree"},
-            {"name": "Tatopani-Ghasa Vertical Cut", "lat": 28.570, "lon": 83.648, "elev": 1750.0, "traffic": "2,200 veh/day", "desc": "Deep rock cut beneath world deepest gorge walls with severe toe unloading"},
-            {"name": "Pokhara-Baglung Highway (Mid-Hill Arterial)", "lat": 28.270, "lon": 83.590, "elev": 1050.0, "traffic": "5,800 veh/day", "desc": "Heavy traffic national arterial traversing weathered saprolite cut-slopes"},
-        ],
-        "HYDRO_INFRASTRUCTURE": [
-            {"name": "Kali Gandaki A Hydropower Dam & Intake", "lat": 28.180, "lon": 83.590, "elev": 520.0, "metric": "144 MW Hydropower", "desc": "Nepal largest operating hydro plant; vulnerable to sediment and slope runout"},
-            {"name": "Rahughat Hydropower Headworks", "lat": 28.380, "lon": 83.570, "elev": 920.0, "metric": "40 MW Hydro Project", "desc": "Dam intake in deeply incised tributary valley subject to flash landslides"},
-            {"name": "Jomsom High-Altitude Mountain Runway", "lat": 28.782, "lon": 83.723, "elev": 2720.0, "metric": "Critical Aviation Hub", "desc": "Aviation lifeline bounded by steep dry colluvial mountain walls"},
-        ],
-        "RIVER_GORGE": [
-            {"name": "Kali Gandaki World Deepest Gorge Axis", "lat": 28.650, "lon": 83.650, "elev": 2200.0, "metric": "Deepest Gorge on Earth", "desc": "5500m relief between Annapurna and Dhaulagiri peaks; massive rockfall energy"},
-            {"name": "Rupse Chhahara Waterfall Gorge Flank", "lat": 28.525, "lon": 83.655, "elev": 1350.0, "metric": "Debris Avalanche Chute", "desc": "Steep torrent corridor that repeatedly sweeps highway spans"},
-        ],
-        "CRYOSPHERE_GLACIAL": [
-            {"name": "Dhaulagiri I Icefall Avalanche Face", "lat": 28.698, "lon": 83.490, "elev": 5900.0, "metric": "8167m Peak Glacial Face", "desc": "North-east ice face generating high-magnitude powder and rock-ice slides"},
-            {"name": "Annapurna IV Sabche Cirque Wall", "lat": 28.612, "lon": 84.085, "elev": 5420.0, "metric": "Seti Gorge Source Cirque", "desc": "Site of catastrophic 2012 Seti rock-ice avalanche and flood surge"},
-        ],
-    },
-    "karnali": {
-        "SETTLEMENT": [
-            {"name": "Manma Town (Kalikot District HQ)", "lat": 29.145, "lon": 81.615, "elev": 1400.0, "pop": "9,000 residents", "desc": "High ridge district center built on 35° colluvial slopes with severe gully erosion"},
-            {"name": "Jumla Khalanga Urban Valley", "lat": 29.275, "lon": 82.185, "elev": 2514.0, "pop": "19,000 residents", "desc": "High mountain valley capital connected solely by vulnerable Karnali Highway"},
-            {"name": "Dailekh Bazar Commercial Center", "lat": 28.840, "lon": 81.710, "elev": 1400.0, "pop": "22,000 residents", "desc": "Historic hill district town surrounded by heavily farmed weathered slopes"},
-            {"name": "Raskot Mountain Municipality", "lat": 29.230, "lon": 81.560, "elev": 1800.0, "pop": "16,000 residents", "desc": "Terraced agricultural community on steep fragile metamorphic bedrock"},
-            {"name": "Nagma Confluence Bazar", "lat": 29.185, "lon": 81.890, "elev": 1200.0, "pop": "2,200 residents", "desc": "Strategic junction town at confluence of Karnali and Tila rivers"},
-            {"name": "Pili Village & Memorial Ridge", "lat": 29.170, "lon": 81.650, "elev": 1650.0, "pop": "1,400 residents", "desc": "Hillside village above active Karnali Highway cut-slope failure zones"},
-        ],
-        "HIGHWAY_ROADCUT": [
-            {"name": "Karnali Highway (Gaganepani-Sunarkhola Choke)", "lat": 28.980, "lon": 81.730, "elev": 1150.0, "traffic": "1,600 veh/day", "desc": "Infamous landslide choke point with continuous toe failure during monsoon"},
-            {"name": "Karnali Highway (Kalikot-Pili Vertical Rock Cut)", "lat": 29.155, "lon": 81.635, "elev": 1380.0, "traffic": "1,200 veh/day", "desc": "Blasted into fractured phyllite cliffs; vehicle loss risk from falling rock"},
-            {"name": "Nagma-Jumla Gorge Alignment", "lat": 29.230, "lon": 82.020, "elev": 1950.0, "traffic": "1,100 veh/day", "desc": "Narrow canyon road-cut along Tila River subject to undercutting"},
-            {"name": "Dailekh Mid-Hill Highway Cut-Slopes", "lat": 28.870, "lon": 81.680, "elev": 1420.0, "traffic": "2,200 veh/day", "desc": "Extensive highway excavation cutting through deep residual soils"},
-        ],
-        "HYDRO_INFRASTRUCTURE": [
-            {"name": "Upper Karnali Hydropower Dam Site", "lat": 28.820, "lon": 81.510, "elev": 480.0, "metric": "900 MW Planned Mega Project", "desc": "Major hydroelectric bend development in deep rock gorge"},
-            {"name": "Tila River Small Hydro Headworks", "lat": 29.210, "lon": 81.950, "elev": 1780.0, "metric": "Regional Power Supply", "desc": "Hydro plant serving Jumla power grid; vulnerable to river sediment surges"},
-            {"name": "Kalikot District Hospital Complex", "lat": 29.148, "lon": 81.618, "elev": 1420.0, "metric": "Sole Emergency Hospital", "desc": "Vital regional healthcare center on steep slope vulnerable to scarp retrogradation"},
-        ],
-        "RIVER_GORGE": [
-            {"name": "Karnali River Deep Canyon Axis", "lat": 29.100, "lon": 81.680, "elev": 1120.0, "metric": "Wild River Fluvial Flank", "desc": "Fast-flowing antecedent river undercutting high-relief mountain flanks"},
-            {"name": "Tila River Narrow Choke Point", "lat": 29.250, "lon": 82.080, "elev": 2150.0, "metric": "Tributary Gorge Neck", "desc": "Channel constriction where debris slides frequently impound water"},
-        ],
-        "CRYOSPHERE_GLACIAL": [
-            {"name": "Saipal Glacier Slopes & Cirque Wall", "lat": 29.810, "lon": 81.490, "elev": 5850.0, "metric": "7031m Peak Glacier Head", "desc": "Far-western cryosphere source; permafrost thaw degradation trigger"},
-            {"name": "Halji Limi High Glacial Pass", "lat": 29.830, "lon": 81.980, "elev": 4800.0, "metric": "GLOF Outburst Corridor", "desc": "Source of recurrent GLOF events flooding remote Himalayan villages"},
-        ],
-    },
-    "bagmati_narayani": {
-        "SETTLEMENT": [
-            {"name": "Mugling Commercial Highway Junction", "lat": 27.855, "lon": 84.555, "elev": 240.0, "pop": "8,000 residents / 20k transit", "desc": "Nepal most vital transport confluence town beneath steep 44° rock slopes"},
-            {"name": "Malekhu River Bazar & Fish Hub", "lat": 27.805, "lon": 84.825, "elev": 360.0, "pop": "4,500 residents", "desc": "Lifeline highway town bounded by Trishuli River and steep cut-slopes"},
-            {"name": "Gajuri Hillside Town", "lat": 27.795, "lon": 84.885, "elev": 450.0, "pop": "6,000 residents", "desc": "Commercial and educational center on narrow river corridor terraces"},
-            {"name": "Naubise Valley Transport Gateway", "lat": 27.720, "lon": 85.165, "elev": 890.0, "pop": "7,000 residents", "desc": "Western vehicular entrance to Kathmandu Valley beneath Nagdhunga pass slopes"},
-            {"name": "Daman High Mountain Plateau", "lat": 27.605, "lon": 85.090, "elev": 2320.0, "pop": "3,200 residents", "desc": "High pass community on Mahabharat range with steep orchard slopes"},
-            {"name": "Bhimphedi Historic Gateway Town", "lat": 27.550, "lon": 85.130, "elev": 1150.0, "pop": "4,000 residents", "desc": "Historical valley gateway beneath steep fractured limestone ridges"},
-            {"name": "Kurintar Cable Car Commercial Base", "lat": 27.880, "lon": 84.580, "elev": 280.0, "pop": "3,500 residents / pilgrims", "desc": "Manakamana cable car terminal situated on narrow alluvial shelf"},
-        ],
-        "HIGHWAY_ROADCUT": [
-            {"name": "Prithvi Highway (Malekhu-Mugling Cliff Cut)", "lat": 27.825, "lon": 84.710, "elev": 320.0, "traffic": "14,000 veh/day (National Lifeline)", "desc": "Continuous rock excavation in sheared phyllite; primary food & fuel corridor"},
-            {"name": "Narayanghat-Mugling Gorge Highway", "lat": 27.810, "lon": 84.530, "elev": 220.0, "traffic": "12,500 veh/day", "desc": "Deep engineered highway cut with chronic high-impact monsoon landslides"},
-            {"name": "Naubise-Nagdhunga Pass Climbing Cuts", "lat": 27.715, "lon": 85.195, "elev": 1250.0, "traffic": "11,000 veh/day", "desc": "Steep switchbacks prone to fill-slope collapse and mudslides"},
-            {"name": "Tribhuvan Highway Hairpin Switchbacks", "lat": 27.580, "lon": 85.110, "elev": 1780.0, "traffic": "1,800 veh/day", "desc": "High-altitude mountain road cut across steep Mahabharat fault zones"},
-        ],
-        "HYDRO_INFRASTRUCTURE": [
-            {"name": "Kulekhani I Reservoir Dam & Spillway", "lat": 27.610, "lon": 85.155, "elev": 1530.0, "metric": "60 MW Peaking Storage Dam", "desc": "Nepal only major storage dam; reservoir perimeter slopes prone to landslides"},
-            {"name": "Kulekhani II & III Powerhouse Complex", "lat": 27.560, "lon": 85.145, "elev": 920.0, "metric": "46 MW Combined Capacity", "desc": "Strategic power infrastructure nestled in deep canyon floor"},
-            {"name": "Mugling Arch Motor Bridge", "lat": 27.857, "lon": 84.557, "elev": 235.0, "metric": "Strategic Highway Bridge", "desc": "Vital link connecting Kathmandu, Pokhara, and the southern plains"},
-            {"name": "Manakamana Cable Car Pylon Slopes", "lat": 27.890, "lon": 84.585, "elev": 850.0, "metric": "Aerial Passenger Transit", "desc": "High-voltage cable transport towers anchored on steep 48° rock ribs"},
-        ],
-        "RIVER_GORGE": [
-            {"name": "Trishuli River Lower Canyon Flank", "lat": 27.840, "lon": 84.620, "elev": 260.0, "metric": "Arterial River Flank", "desc": "River scouring Highway embankment toe along 30 km canyon"},
-            {"name": "Narayani River Alluvial Bend", "lat": 27.710, "lon": 84.470, "elev": 180.0, "metric": "Major Fluvial Confluence", "desc": "High discharge monsoon floods causing extensive bank undercutting"},
-        ],
-        "CRYOSPHERE_GLACIAL": [
-            {"name": "Ganesh Himal Southern Runoff Slopes", "lat": 28.040, "lon": 85.250, "elev": 4950.0, "metric": "Headwater Glacial Basin", "desc": "Alpine headwaters feeding monsoon torrential surges into Trishuli canyon"},
-        ],
-    },
-    "sun_koshi": {
-        "SETTLEMENT": [
-            {"name": "Bahrabise Commercial Town", "lat": 27.785, "lon": 85.900, "elev": 820.0, "pop": "9,000 residents", "desc": "Major Sindhupalchok trading hub repeatedly devastated by Bhotekoshi floods"},
-            {"name": "Tatopani Border Town & Dry Port", "lat": 27.950, "lon": 85.935, "elev": 1200.0, "pop": "3,000 residents / customs", "desc": "Historic China trade port beneath vertical shattered gneiss gorges"},
-            {"name": "Charikot District HQ & Hospital", "lat": 27.670, "lon": 86.030, "elev": 1970.0, "pop": "16,000 residents", "desc": "Dolakha capital on prominent ridge overlooking Tamakoshi gorge"},
-            {"name": "Jiri Himalayan Gateway Town", "lat": 27.635, "lon": 86.230, "elev": 1905.0, "pop": "5,500 residents", "desc": "Historic gateway to Everest situated in high mountain valley"},
-            {"name": "Dolalghat Confluence Market", "lat": 27.640, "lon": 85.710, "elev": 630.0, "pop": "3,800 residents", "desc": "Junction town at Indrawati and Sun Koshi confluence beneath steep hillslopes"},
-            {"name": "Chautara Hilltop Capital", "lat": 27.775, "lon": 85.715, "elev": 1560.0, "pop": "12,000 residents", "desc": "Sindhupalchok administrative center on 2015 earthquake rupture zone"},
-        ],
-        "HIGHWAY_ROADCUT": [
-            {"name": "Araniko Highway (Jure Landslide Scar Cut)", "lat": 27.760, "lon": 85.860, "elev": 750.0, "traffic": "4,500 veh/day", "desc": "Passes through toe of massive 2014 Jure landslide that dammed Sun Koshi"},
-            {"name": "Bahrabise-Tatopani Gorge Road-Cuts", "lat": 27.880, "lon": 85.920, "elev": 980.0, "traffic": "3,200 veh/day", "desc": "Excavated into sheer valley walls with severe monsoon washouts"},
-            {"name": "Charikot-Tamakoshi Highway Switchbacks", "lat": 27.710, "lon": 86.080, "elev": 1350.0, "traffic": "2,100 veh/day", "desc": "Steep hairpins descending 1000m to Upper Tamakoshi project sites"},
-            {"name": "BP Highway Sun Koshi Valley Cuts", "lat": 27.665, "lon": 85.740, "elev": 680.0, "traffic": "6,500 veh/day", "desc": "Modern Japanese-engineered highway with toe protection on steep hillslopes"},
-        ],
-        "HYDRO_INFRASTRUCTURE": [
-            {"name": "Upper Tamakoshi Dam & Desanding Basin", "lat": 27.850, "lon": 86.210, "elev": 1980.0, "metric": "456 MW National Pride", "desc": "Highest head hydropower in Nepal; dam in extreme steep V-notch gorge"},
-            {"name": "Upper Tamakoshi Underground Powerhouse", "lat": 27.755, "lon": 86.130, "elev": 1150.0, "metric": "Strategic Power Grid", "desc": "Underground cavern and portal situated in high-stress metamorphic rock"},
-            {"name": "Bhotekoshi Hydroelectric Powerhouse", "lat": 27.820, "lon": 85.910, "elev": 890.0, "metric": "45 MW Hydropower", "desc": "Facility repeatedly damaged by GLOFs and boulder-rolling flash floods"},
-            {"name": "Friendship Bridge Border Crossing", "lat": 27.975, "lon": 85.960, "elev": 1350.0, "metric": "International Border Bridge", "desc": "Vital bridge link between Nepal and Tibet across torrential Bhotekoshi"},
-        ],
-        "RIVER_GORGE": [
-            {"name": "Bhotekoshi Boulder Canyon Choke", "lat": 27.850, "lon": 85.915, "elev": 920.0, "metric": "High-Gradient Torrents", "desc": "Steepest river gradient in Nepal; extreme hydrodynamic scouring"},
-            {"name": "Sun Koshi River Canyon Flanks", "lat": 27.600, "lon": 85.820, "elev": 580.0, "metric": "Regional Trunk River", "desc": "Deep valley walls susceptible to large-scale translational sliding"},
-        ],
-        "CRYOSPHERE_GLACIAL": [
-            {"name": "Tsho Rolpa Glacial Lake Moraine Dam", "lat": 27.862, "lon": 86.440, "elev": 5190.0, "metric": "Nepal Largest GLOF Threat", "desc": "Contains ~85 million m3 water; threatened by terminal moraine degradation"},
-        ],
-    },
-    "sapta_koshi_kanchenjunga": {
-        "SETTLEMENT": [
-            {"name": "Khandbari Urban Town (Sankhuwasabha HQ)", "lat": 27.375, "lon": 87.205, "elev": 1030.0, "pop": "26,000 residents", "desc": "Rapidly growing hill district capital along Koshi Highway corridor"},
-            {"name": "Taplejung / Phungling Bazaar", "lat": 27.350, "lon": 87.670, "elev": 1820.0, "pop": "19,000 residents", "desc": "District center in far-eastern Nepal situated on steep amphitheater slopes"},
-            {"name": "Num Village (Makalu Trek Gateway)", "lat": 27.550, "lon": 87.285, "elev": 1560.0, "pop": "1,800 residents", "desc": "Perched village above Arun River gorge directly overlooking Arun-3 dam axis"},
-            {"name": "Hedangna Hillside Community", "lat": 27.575, "lon": 87.260, "elev": 1480.0, "pop": "1,400 residents", "desc": "Isolated indigenous settlement on 36° slopes across the Arun gorge"},
-            {"name": "Chainpur Heritage Brass Town", "lat": 27.290, "lon": 87.320, "elev": 1320.0, "pop": "8,500 residents", "desc": "Historic settlement on stable terrace surrounded by deeply incised streams"},
-            {"name": "Tumlingtar Airport Plateau", "lat": 27.315, "lon": 87.195, "elev": 510.0, "pop": "5,000 residents / airport", "desc": "Plateau bench between Arun and Sabha rivers; regional transit hub"},
-        ],
-        "HIGHWAY_ROADCUT": [
-            {"name": "Koshi Highway (Hile-Khandbari Ridge Cut)", "lat": 27.250, "lon": 87.220, "elev": 1180.0, "traffic": "2,800 veh/day", "desc": "Arterial road linking eastern plains to northern Himalayan frontier"},
-            {"name": "Khandbari-Num Arun-3 Access Highway", "lat": 27.460, "lon": 87.240, "elev": 1320.0, "traffic": "1,900 veh/day", "desc": "Heavy industrial road cut through steep weathered schist for dam transit"},
-            {"name": "Taplejung-Kabeli Gorge Road-Cuts", "lat": 27.310, "lon": 87.720, "elev": 1450.0, "traffic": "1,100 veh/day", "desc": "Single-lane cut-slopes vulnerable to monsoon debris choking"},
-        ],
-        "HYDRO_INFRASTRUCTURE": [
-            {"name": "Arun-3 Mega Dam Axis (Phaksinda)", "lat": 27.540, "lon": 87.255, "elev": 820.0, "metric": "900 MW Mega Hydro", "desc": "National priority export hydropower dam in deep Arun gorge"},
-            {"name": "Arun-3 Powerhouse Complex (Pukhuwa)", "lat": 27.420, "lon": 87.230, "elev": 580.0, "metric": "Underground Powerhouse", "desc": "Massive cavern construction in steep valley walls"},
-            {"name": "Lower Arun Hydropower Dam Site", "lat": 27.360, "lon": 87.210, "elev": 510.0, "metric": "669 MW Planned Hydro", "desc": "Cascade hydro project site in lower Arun canyon"},
-            {"name": "Kabeli-A Hydroelectric Intake", "lat": 27.290, "lon": 87.740, "elev": 780.0, "metric": "37 MW Hydropower", "desc": "Headworks in narrow Tamor tributary canyon"},
-        ],
-        "RIVER_GORGE": [
-            {"name": "Arun River Deep Trans-Himalayan Gorge", "lat": 27.480, "lon": 87.245, "elev": 750.0, "metric": "Deepest Eastern Nepal Gorge", "desc": "Cuts directly through High Himalayan crystalline rocks with enormous relief"},
-            {"name": "Tamor River Boulder Cascade Narrows", "lat": 27.260, "lon": 87.650, "elev": 690.0, "metric": "Torrential Fluvial Axis", "desc": "High velocity river scouring steep toe deposits"},
-        ],
-        "CRYOSPHERE_GLACIAL": [
-            {"name": "Makalu Southeastern Icefall (8485m)", "lat": 27.890, "lon": 87.120, "elev": 6100.0, "metric": "8485m Peak Hanging Glacier", "desc": "Major glacial detachment headwall feeding Barun river basin"},
-            {"name": "Lower Barun Glacial Lake Moraine Wall", "lat": 27.798, "lon": 87.092, "elev": 4890.0, "metric": "High Expansion GLOF Lake", "desc": "Rapidly growing proglacial lake with active calving front"},
-        ],
-    },
-}
 
 
 def resolve_corridor_live_telemetry(corridor_id: str) -> Dict[str, Any]:
@@ -665,15 +475,16 @@ class ValleyGridPhysicsService:
         holds - and 0, plus ``grid_built: False``, when it has not been built. The
         dashboard must be able to tell "no grid" from "a grid".
         """
-        from app.engine.valley_grid_terrain import load_grid
+        from app.engine.valley_grid_terrain import load_corridor
 
-        grid = load_grid()
         out = []
         for cid, meta in PRIMARY_CORRIDORS.items():
-            cells = grid.get(cid) or []
-            with_soil = sum(1 for c in cells if c.get("clay_fraction") is not None)
-            exposed = sum(1 for c in cells
-                          if c.get("exposure") in ("ROAD", "SETTLEMENT"))
+            cols = load_corridor(cid)
+            n_cells = int(cols["lat"].size) if cols else 0
+            with_soil = int((~np.isnan(cols["clay_fraction"])).sum()) if cols else 0
+            exposed = (int(sum(1 for e in cols["exposure"]
+                               if str(e) in ("ROAD", "SETTLEMENT"))) if cols else 0)
+            cells = range(n_cells)
             out.append({
                 "id": meta.id,
                 "name": meta.name,
@@ -723,106 +534,119 @@ class ValleyGridPhysicsService:
         Raises FileNotFoundError when the grid has not been built. A warning system that
         cannot load its terrain must fail loudly, not improvise one.
         """
-        from app.engine.valley_grid_terrain import load_grid
+        from app.engine.valley_grid_terrain import load_corridor
 
         if corridor_id not in PRIMARY_CORRIDORS:
             raise KeyError(f"Unknown corridor '{corridor_id}'. "
                            f"Available: {list(PRIMARY_CORRIDORS.keys())}")
 
-        grid = load_grid()
-        raw = grid.get(corridor_id) or []
-        if not raw:
+        cols = load_corridor(corridor_id)
+        if not cols:
             raise FileNotFoundError(
                 f"No measured grid for corridor '{corridor_id}'. Build it with "
                 f"scripts/build_valley_grid.py - the grid is not generated at runtime.")
 
-        usable = [c for c in raw if c.get("clay_fraction") is not None
-                  and c.get("dry_bulk_density_g_cm3") is not None]
+        # Soil is required, not optional: the FS needs the unit weight as much as the
+        # cohesion. NaN here means SoilGrids masked the pixel - glacier or bare rock -
+        # and those cells are dropped rather than filled.
+        has_soil = (~np.isnan(cols["clay_fraction"])
+                    & ~np.isnan(cols["dry_bulk_density_g_cm3"]))
+        n_raw = int(cols["lat"].size)
+        keep = np.nonzero(has_soil)[0]
         if not hasattr(self, "_excluded_no_soil"):
             self._excluded_no_soil = {}
-        self._excluded_no_soil[corridor_id] = len(raw) - len(usable)
-        if not usable:
+        self._excluded_no_soil[corridor_id] = n_raw - int(keep.size)
+        if keep.size == 0:
             raise FileNotFoundError(
-                f"Corridor '{corridor_id}' has {len(raw)} cells but none with resolved "
+                f"Corridor '{corridor_id}' has {n_raw} cells but none with resolved "
                 f"soil; nothing can be evaluated with the infinite-slope model.")
 
-        def arr(key, dtype=np.float64, default=np.nan):
-            return np.array([c.get(key) if c.get(key) is not None else default
-                             for c in usable], dtype=dtype)
+        def arr(key, default=np.nan):
+            """One column, soil-masked, with absences replaced by an explicit default.
 
+            ``default`` is a sentinel the physics can reason about (1e6 for "nothing
+            mapped within range"), never a stand-in measurement.
+            """
+            if key not in cols:
+                return np.full(keep.size, default, dtype=np.float64)
+            v = cols[key][keep].astype(np.float64)
+            return np.where(np.isnan(v), default, v)
+
+        def txt(key):
+            if key not in cols:
+                return np.array([""] * keep.size, dtype=object)
+            return cols[key][keep]
+
+        n = int(keep.size)
         elevation = arr("elevation_m")
         slope = arr("slope_deg")
-        road_dist = arr("road_distance_m", default=1.0e6)   # no road mapped within 1 km
+        road_dist = arr("road_distance_m", default=1.0e6)   # nothing mapped within 1 km
         river_dist = arr("distance_to_river_m", default=1.0e6)
         settle_dist = arr("settlement_distance_m", default=1.0e6)
-        road_class = np.array([c.get("road_class") or "" for c in usable], dtype=object)
-
-        # Asset category, derived from the measurements rather than assigned by quota.
-        # The old code set these by hardcoded share - 32% settlement, 34% highway and so
-        # on - so "911 settlement cells" was int(round(2850 * 0.32)) and described
-        # nothing observed. Each test below is a real threshold on a real distance.
-        HIGHWAY = {"trunk", "primary", "secondary", "tertiary",
-                   "trunk_link", "primary_link", "secondary_link", "motorway"}
         hydro_dist = arr("hydro_distance_m", default=1.0e6)
-        asset_type = np.empty(len(usable), dtype=object)
-        for i, c in enumerate(usable):
-            rc = c.get("road_class") or ""
-            # Hydro first: a slope above a dam or powerhouse is the highest-consequence
-            # case in these corridors, and it should not be relabelled as a gorge just
-            # because the structure sits on a river.
-            if hydro_dist[i] <= 1500.0:
-                asset_type[i] = "HYDRO_INFRASTRUCTURE"
-            elif river_dist[i] <= 150.0:
-                asset_type[i] = "RIVER_GORGE"
-            elif rc in HIGHWAY and road_dist[i] <= 500.0:
-                asset_type[i] = "HIGHWAY_ROADCUT"
-            elif settle_dist[i] <= 2000.0:
-                asset_type[i] = "SETTLEMENT"
-            elif elevation[i] >= 4500.0:
-                asset_type[i] = "CRYOSPHERE_GLACIAL"
-            elif road_dist[i] <= 1000.0:
-                asset_type[i] = "HIGHWAY_ROADCUT"
-            else:
-                asset_type[i] = "HILLSLOPE"
-
-        # Name a cell after the nearest settlement only when it is actually near one.
-        # ``settlement_name`` is the nearest at any distance, so without this bound a
-        # hillslope 20 km from Chule gets labelled "Chule" on the map.
-        NAME_RADIUS_M = 3000.0
-        asset_name = np.array(
-            [(c.get("hydro_name") if (c.get("hydro_distance_m") is not None
-                                      and c["hydro_distance_m"] <= 1500.0)
-              else c.get("settlement_name") if (c.get("settlement_distance_m") is not None
-                                           and c["settlement_distance_m"] <= NAME_RADIUS_M)
-              else (f"{c['road_class']} road" if c.get("road_class") else "Unnamed slope"))
-             for c in usable], dtype=object)
-
-        # Exposure description, stated from measured distances. No prose is invented for
-        # a cell: if nothing is mapped nearby, it says so.
-        desc = np.empty(len(usable), dtype=object)
-        metric = np.empty(len(usable), dtype=object)
-        for i, c in enumerate(usable):
-            bits = []
-            if c.get("road_distance_m") is not None:
-                bits.append(f"{c['road_distance_m']:.0f} m from a mapped "
-                            f"{c.get('road_class') or 'road'}")
-            if c.get("settlement_distance_m") is not None and settle_dist[i] <= 5000.0:
-                bits.append(f"{c['settlement_distance_m']:.0f} m from "
-                            f"{c.get('settlement_name') or 'a settlement'}")
-            if c.get("distance_to_river_m") is not None and river_dist[i] <= 2000.0:
-                bits.append(f"{c['distance_to_river_m']:.0f} m from a mapped river")
-            if c.get("hydro_distance_m") is not None:
-                bits.append(f"{c['hydro_distance_m']:.0f} m from "
-                            f"{c.get('hydro_name') or 'a hydro structure'}")
-            desc[i] = "; ".join(bits) if bits else "No mapped road, settlement or river within range"
-            metric[i] = (f"{c.get('settlement_kind') or 'slope'} "
-                         f"@ {c['elevation_m']:.0f} m, {c['slope_deg']:.0f} deg")
-
-        # DSGSD indication from measured morphology: high, steep, concave and with the
-        # km-scale relief that deep-seated deformation requires. The previous version
-        # tested the same thresholds against random numbers.
         relief = arr("local_relief_m", default=0.0)
         curvature = arr("profile_curvature", default=0.0)
+        road_class = txt("road_class")
+        settle_name = txt("settlement_name")
+        settle_kind = txt("settlement_kind")
+        hydro_name = txt("hydro_name")
+
+        # Asset category, derived from measured distances rather than assigned by quota.
+        # The old code set these by hardcoded share - 32% settlement, 34% highway and so
+        # on - so "911 settlement cells" was int(round(2850 * 0.32)) and described
+        # nothing observed. Each test below is a real threshold on a real distance, and
+        # the order encodes consequence: a slope above a powerhouse is not relabelled a
+        # gorge merely because the structure sits on a river.
+        HIGHWAY = {"trunk", "primary", "secondary", "tertiary",
+                   "trunk_link", "primary_link", "secondary_link", "motorway"}
+        is_highway = np.array([str(rc) in HIGHWAY for rc in road_class], dtype=bool)
+
+        asset_type = np.full(n, "HILLSLOPE", dtype=object)
+        asset_type[road_dist <= 1000.0] = "HIGHWAY_ROADCUT"
+        asset_type[elevation >= 4500.0] = "CRYOSPHERE_GLACIAL"
+        asset_type[settle_dist <= 2000.0] = "SETTLEMENT"
+        asset_type[is_highway & (road_dist <= 500.0)] = "HIGHWAY_ROADCUT"
+        asset_type[river_dist <= 150.0] = "RIVER_GORGE"
+        asset_type[hydro_dist <= 1500.0] = "HYDRO_INFRASTRUCTURE"
+
+        # Name a cell after the nearest settlement only when it is actually near one.
+        # The stored name is the nearest at ANY distance, so without this bound a
+        # hillslope 20 km from Chule gets labelled "Chule" on the map.
+        NAME_RADIUS_M = 3000.0
+        asset_name = np.empty(n, dtype=object)
+        desc = np.empty(n, dtype=object)
+        metric = np.empty(n, dtype=object)
+        for i in range(n):
+            if hydro_dist[i] <= 1500.0 and hydro_name[i]:
+                asset_name[i] = str(hydro_name[i])
+            elif settle_dist[i] <= NAME_RADIUS_M and settle_name[i]:
+                asset_name[i] = str(settle_name[i])
+            elif road_class[i]:
+                asset_name[i] = f"{road_class[i]} road"
+            else:
+                asset_name[i] = "Unnamed slope"
+
+            # Exposure prose is stated from measured distances. Nothing is invented for
+            # a cell: if nothing is mapped nearby, it says exactly that.
+            bits = []
+            if road_dist[i] < 1.0e5:
+                bits.append(f"{road_dist[i]:.0f} m from a mapped "
+                            f"{road_class[i] or 'road'}")
+            if settle_dist[i] <= 5000.0 and settle_name[i]:
+                bits.append(f"{settle_dist[i]:.0f} m from {settle_name[i]}")
+            if river_dist[i] <= 2000.0:
+                bits.append(f"{river_dist[i]:.0f} m from a mapped river")
+            if hydro_dist[i] <= 1500.0:
+                bits.append(f"{hydro_dist[i]:.0f} m from "
+                            f"{hydro_name[i] or 'a hydro structure'}")
+            desc[i] = ("; ".join(bits) if bits
+                       else "No mapped road, settlement, river or structure within range")
+            metric[i] = (f"{settle_kind[i] or 'slope'} @ {elevation[i]:.0f} m, "
+                         f"{slope[i]:.0f} deg")
+
+        # DSGSD indication from measured morphology: high, steep, concave, and with the
+        # km-scale relief deep-seated deformation requires. The previous version tested
+        # these same thresholds against random numbers.
         dsgsd = ((elevation >= 2800.0) & (slope >= 28.0)
                  & (curvature < -0.05) & (relief >= 500.0))
 
@@ -859,8 +683,17 @@ class ValleyGridPhysicsService:
         s_ante: Optional[float] = None,
         seismic_kh: Optional[float] = None,
         asset_type: Optional[str] = None,
+        bbox: Optional[Tuple[float, float, float, float]] = None,
+        exposed_only: bool = False,
+        limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """Evaluate physics and Factor of Safety across all cells in a corridor using live raw telemetry."""
+        """Evaluate physics and Factor of Safety across a corridor's MEASURED cells.
+
+        ``bbox`` (min_lon, min_lat, max_lon, max_lat), ``exposed_only`` and ``limit``
+        narrow which cells become records. They are applied before record construction
+        rather than after, and what they dropped is recorded in ``self._last_selection``
+        so the caller can report it instead of presenting a truncated grid as a whole one.
+        """
         if corridor_id not in self._cells_cache:
             self._cells_cache[corridor_id] = self._generate_corridor_cells(corridor_id)
 
@@ -902,11 +735,40 @@ class ValleyGridPhysicsService:
             dsgsd_indicated=terrain["dsgsd_indicated"],
         )
 
-        n = terrain["latitude"].size
+        # Decide WHICH cells become records before building any.
+        #
+        # A corridor holds tens of thousands of measured cells and the physics above is
+        # vectorised over all of them cheaply, but turning each into a ~25-key dict is
+        # not cheap. Building 29,849 records and discarding 27,349 downstream cost 4.3 s
+        # a request; selecting first costs a boolean mask.
+        #
+        # Selection order matters: the viewport and exposure filters are applied first,
+        # then the cap keeps the LOWEST-FS cells. A cap applied before the sort would
+        # drop exactly the cells a warning system exists to show.
+        n_all = terrain["latitude"].size
+        keep_idx = np.arange(n_all)
+        if bbox is not None:
+            w, s_lat, e, n_lat = bbox
+            in_view = ((terrain["longitude"] >= w) & (terrain["longitude"] <= e)
+                       & (terrain["latitude"] >= s_lat) & (terrain["latitude"] <= n_lat))
+            keep_idx = keep_idx[in_view[keep_idx]]
+        if exposed_only:
+            is_exposed = terrain["asset_type"] != "HILLSLOPE"
+            keep_idx = keep_idx[is_exposed[keep_idx]]
+
+        self._last_selection = {
+            "evaluated": int(n_all),
+            "after_filters": int(keep_idx.size),
+            "truncated": bool(limit is not None and keep_idx.size > limit),
+        }
+        if limit is not None and keep_idx.size > limit:
+            keep_idx = keep_idx[np.argsort(phys["fs"][keep_idx])[:limit]]
+
         records: List[Dict[str, Any]] = []
 
         half_w = 0.00108  # ~120m half-width in degrees for 240m grid rectangle (NISAR-aligned 3x3 patch)
-        for i in range(n):
+        for i in keep_idx:
+            i = int(i)
             lat = float(terrain["latitude"][i])
             lon = float(terrain["longitude"][i])
             fs_val = float(phys["fs"][i])
