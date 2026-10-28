@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 import math
+import time
 import numpy as np
 from fastapi import APIRouter, HTTPException, Query
 
@@ -52,6 +53,14 @@ from app.physics.infinite_slope import (
 from app.physics.runout_routing import (
     compute_settlement_impact_and_arrival_times,
     simulate_debris_runout,
+)
+from app.physics.valley_grid_physics import (
+    classify_alert_level,
+    compute_vectorized_grid_fs,
+    fs_to_gradient_color,
+    valley_grid_service,
+    resolve_corridor_live_telemetry,
+    PRIMARY_CORRIDORS,
 )
 
 router = APIRouter(prefix="/api/v1", tags=["Himalayan-MHEWS"])
@@ -501,6 +510,172 @@ def get_basin_susceptibility_geojson(basin_id: str) -> Dict[str, object]:
     }
 
 
+@router.get("/grid/corridors")
+def list_valley_grid_corridors() -> Dict[str, Any]:
+    """Return active monitored valley corridors spanning river basins, roads, faults, and settlements."""
+    corridors = valley_grid_service.get_corridors_list()
+    total_cells = sum(c["cell_count"] for c in corridors)
+    return {
+        "status": "ok",
+        "total_corridors": len(corridors),
+        "total_grid_cells": total_cells,
+        "corridors": corridors,
+    }
+
+
+@router.get("/grid/cells")
+def get_valley_grid_cells(
+    corridor_id: str = Query("langtang", description="Corridor ID (e.g. langtang, budhi_gandaki, kali_gandaki, karnali, etc.)"),
+    rainfall_72h_mm: Optional[float] = Query(None, ge=0.0, le=1000.0, description="Optional override in mm; if omitted, uses live raw real-time hydromet telemetry"),
+    api_30d_mm: Optional[float] = Query(None, ge=0.0, le=1000.0, description="Optional override in mm; if omitted, uses live raw real-time antecedent moisture"),
+    seismic_kh: Optional[float] = Query(None, ge=0.0, le=1.0, description="Optional override; if omitted, uses live raw real-time USGS seismic PGA"),
+    asset_type: Optional[str] = Query(None, description="Filter: all, settlement, highway_roadcut, hydro_infrastructure, river_gorge, cryosphere_glacial, hillslope"),
+    exposure: str = Query("exposed", description="'exposed' (default: cells within 1 km of a mapped road or 2 km of a settlement), or 'all'"),
+    bbox: Optional[str] = Query(None, description="Viewport filter 'min_lon,min_lat,max_lon,max_lat'"),
+    limit: int = Query(2500, ge=1, le=60000, description="Max cells returned, lowest FS first; truncation is reported in summary.truncated"),
+) -> Dict[str, Any]:
+    """Evaluate 240 m grid cells with live Factor of Safety over REAL measured terrain.
+
+    Terrain, soil, roads, rivers and faults are measured, not generated - see
+    ``ValleyGridPhysicsService._load_corridor_cells``. A corridor now holds tens of
+    thousands of real cells rather than a few hundred invented ones, so the response is
+    filtered: by default to cells with actual human exposure, which is the scope this
+    grid exists to cover, and optionally to the map viewport. Any truncation is stated
+    in ``summary.truncated`` rather than silently applied.
+    """
+    if corridor_id not in PRIMARY_CORRIDORS:
+        raise HTTPException(status_code=404, detail=f"Unknown corridor '{corridor_id}'. Available: {list(PRIMARY_CORRIDORS.keys())}")
+
+    # Resolve live telemetry for corridor
+    live_telem = resolve_corridor_live_telemetry(corridor_id)
+    eff_rain = rainfall_72h_mm if rainfall_72h_mm is not None else float(live_telem["rainfall_72h_mm"])
+    eff_api = api_30d_mm if api_30d_mm is not None else float(live_telem["api_30d_mm"])
+    eff_kh = seismic_kh if seismic_kh is not None else float(live_telem["seismic_kh"])
+
+    try:
+        cells = valley_grid_service.evaluate_corridor_grid(
+            corridor_id=corridor_id,
+            rainfall_72h_mm=eff_rain,
+            api_30d_mm=eff_api,
+            seismic_kh=eff_kh,
+            asset_type=asset_type,
+        )
+    except FileNotFoundError as exc:
+        # The grid is measured and cached, never generated on demand. If it is missing
+        # we say so; we do not substitute anything for it.
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    total_evaluated = len(cells)
+    if exposure != "all":
+        cells = [c for c in cells if c.get("asset_type") != "HILLSLOPE"]
+    if bbox:
+        try:
+            w, s_, e, n = (float(v) for v in bbox.split(","))
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="bbox must be 'min_lon,min_lat,max_lon,max_lat'")
+        cells = [c for c in cells
+                 if w <= c["longitude"] <= e and s_ <= c["latitude"] <= n]
+    after_filters = len(cells)
+    truncated = after_filters > limit
+    if truncated:
+        # Keep the most hazardous cells, not an arbitrary prefix - a cap that silently
+        # dropped the RED cells would be worse than no cap at all.
+        cells = sorted(cells, key=lambda c: c["fs"])[:limit]
+
+    fs_vals = [c["fs"] for c in cells]
+    alert_counts = {"RED": 0, "ORANGE": 0, "YELLOW": 0, "GREEN": 0}
+    asset_distribution: Dict[str, int] = {}
+    for c in cells:
+        lvl = c.get("alert_level", "GREEN")
+        if lvl in alert_counts:
+            alert_counts[lvl] += 1
+        atype = c.get("asset_type", "OTHER")
+        asset_distribution[atype] = asset_distribution.get(atype, 0) + 1
+
+    return {
+        "corridor_id": corridor_id,
+        "corridor_name": PRIMARY_CORRIDORS[corridor_id].name,
+        "live_telemetry": {
+            "rainfall_72h_mm": round(eff_rain, 2),
+            "api_30d_mm": round(eff_api, 2),
+            "seismic_kh": round(eff_kh, 4),
+            "temp_2m_c": live_telem.get("temp_2m_c", 15.0),
+            "pdd_snowmelt_mm": live_telem.get("pdd_snowmelt_mm", 0.0),
+            "timestamp_utc": live_telem.get("timestamp_utc", time.time()),
+            "provenance": live_telem.get("provenance", "MEASURED_LIVE_RAW_TELEMETRY"),
+            "is_live": (rainfall_72h_mm is None and api_30d_mm is None and seismic_kh is None),
+        },
+        # Named "evaluation_inputs", not "simulation_parameters": with no override
+        # supplied these ARE the live measured values the physics ran on. The override
+        # arguments exist for offline sensitivity work and are flagged when used.
+        "evaluation_inputs": {
+            "rainfall_72h_mm": round(eff_rain, 2),
+            "api_30d_mm": round(eff_api, 2),
+            "seismic_kh": round(eff_kh, 4),
+            "asset_type_filter": asset_type or "all",
+            "exposure_filter": exposure,
+            "is_override": any(v is not None for v in (rainfall_72h_mm, api_30d_mm, seismic_kh)),
+        },
+        "summary": {
+            "total_cells": len(cells),
+            "cells_evaluated": total_evaluated,
+            "cells_after_filters": after_filters,
+            "truncated": truncated,
+            "cells_without_soil_excluded": getattr(
+                valley_grid_service, "_excluded_no_soil", {}).get(corridor_id, 0),
+            "terrain_provenance": "MEASURED - Copernicus DEM GLO-30, SoilGrids v2.0, OSM, GEM faults",
+            "mean_fs": round(float(np.mean(fs_vals)), 3) if fs_vals else None,
+            "min_fs": round(float(np.min(fs_vals)), 3) if fs_vals else None,
+            "max_fs": round(float(np.max(fs_vals)), 3) if fs_vals else None,
+            "alert_distribution": alert_counts,
+            "asset_distribution": asset_distribution,
+        },
+        "cells": cells,
+    }
+
+
+@router.get("/grid/geojson")
+def get_valley_grid_geojson(
+    corridor_id: str = Query("langtang", description="Corridor ID"),
+    rainfall_72h_mm: Optional[float] = Query(None, ge=0.0, le=1000.0, description="Optional override; if omitted, uses live raw telemetry"),
+    seismic_kh: Optional[float] = Query(None, ge=0.0, le=1.0, description="Optional override; if omitted, uses live raw telemetry"),
+    asset_type: Optional[str] = Query(None, description="Filter: all, settlement, highway_roadcut, hydro_infrastructure, river_gorge, cryosphere_glacial"),
+) -> Dict[str, Any]:
+    """GeoJSON FeatureCollection of 240m grid polygons with FS gradient styling for Leaflet/Deck.gl."""
+    if corridor_id not in PRIMARY_CORRIDORS:
+        raise HTTPException(status_code=404, detail=f"Unknown corridor '{corridor_id}'")
+
+    live_telem = resolve_corridor_live_telemetry(corridor_id)
+    eff_rain = rainfall_72h_mm if rainfall_72h_mm is not None else float(live_telem["rainfall_72h_mm"])
+    eff_kh = seismic_kh if seismic_kh is not None else float(live_telem["seismic_kh"])
+
+    cells = valley_grid_service.evaluate_corridor_grid(
+        corridor_id=corridor_id,
+        rainfall_72h_mm=eff_rain,
+        seismic_kh=eff_kh,
+        asset_type=asset_type,
+    )
+
+    features = []
+    for c in cells:
+        s, w, n, e = c["bounds"]
+        poly = [[[round(w, 5), round(s, 5)], [round(e, 5), round(s, 5)], [round(e, 5), round(n, 5)], [round(w, 5), round(n, 5)], [round(w, 5), round(s, 5)]]]
+        features.append({
+            "type": "Feature",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": poly,
+            },
+            "properties": c,
+        })
+
+    return {
+        "type": "FeatureCollection",
+        "corridor_id": corridor_id,
+        "features": features,
+    }
+
+
 @router.get("/alerts/replay/{scenario_id}")
 def get_historical_cascade_replay(scenario_id: str) -> Dict[str, object]:
     """Replay historical Himalayan hazard cascades (`langtang_2015` or `budhi_gandaki_monsoon`)."""
@@ -535,10 +710,12 @@ def list_sites_of_interest() -> List[Dict[str, object]]:
     """Return catalog of all 491+ monitored sites across Nepal with latest physics calculations and dynamic creep."""
     from app.engine.sites_catalog import load_sites_of_interest
     from app.core.database import get_time_series_store
+    from app.engine.environmental_features import enrich_sites_catalog
 
     sites = load_sites_of_interest()
     store = get_time_series_store()
     calc_map = store.get_latest_physics_calculations()
+    env_map = enrich_sites_catalog()
 
     results = []
     # One local state read for the whole sweep - never per site, never a network call.
@@ -582,6 +759,19 @@ def list_sites_of_interest() -> List[Dict[str, object]]:
         creep = resolved["value_mm_month"]
         c["ground_creep_mm_month"] = creep
         c["ground_creep_provenance"] = resolved["provenance"]
+        env_f = env_map.get(s.site_id)
+        if env_f is None:
+            from app.engine.environmental_features import compute_site_environmental_features
+            env_f = compute_site_environmental_features(
+                site_id=s.site_id,
+                latitude=s.latitude,
+                longitude=s.longitude,
+                elevation_m=s.elevation_m,
+                slope_deg=s.slope_deg,
+                profile_curvature=s.profile_curvature,
+                local_relief_m=s.local_relief_m,
+                basin_id=s.basin_id,
+            )
         results.append({
             "site_id": s.site_id,
             "name": s.name,
@@ -598,6 +788,24 @@ def list_sites_of_interest() -> List[Dict[str, object]]:
             "ground_creep_mm_month": creep,
             "creep_provenance": resolved["provenance"],
             "creep_basis": resolved.get("reason"),
+            "distance_to_road_m": env_f.distance_to_road_m,
+            "road_type": env_f.road_type,
+            "road_cut_penalty": env_f.road_cut_penalty,
+            "bedrock_anchor": {
+                "name": env_f.anchor_name,
+                "latitude": env_f.anchor_lat,
+                "longitude": env_f.anchor_lon,
+                "slope_deg": env_f.anchor_slope_deg,
+            },
+            "environmental": {
+                "clay_fraction": env_f.clay_fraction,
+                "sand_fraction": env_f.sand_fraction,
+                "coarse_rock_fraction": env_f.coarse_rock_fragment_fraction,
+                "dry_bulk_density_g_cm3": env_f.dry_bulk_density_g_cm3,
+                "sentinel2_ndvi": env_f.sentinel2_ndvi,
+                "gedi_canopy_height_m": env_f.gedi_canopy_height_m,
+                "aspect_deg": env_f.aspect_deg,
+            },
         })
     return results
 
@@ -655,20 +863,56 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
         rel_hum = telem.relative_humidity_pct if telem else 45.0
         seis_m = telem.seismic_mag if telem else 0.0
 
-    # Run physics synthesis
+    # Load enriched environmental features (soil, vegetation, aspect, road cut, anchor)
+    from app.engine.environmental_features import enrich_sites_catalog, compute_site_environmental_features
+    env_catalog = enrich_sites_catalog()
+    env = env_catalog.get(site_id)
+    if env is None:
+        env = compute_site_environmental_features(
+            site_id=target_site.site_id,
+            latitude=target_site.latitude,
+            longitude=target_site.longitude,
+            elevation_m=target_site.elevation_m,
+            slope_deg=target_site.slope_deg,
+            profile_curvature=target_site.profile_curvature,
+            local_relief_m=target_site.local_relief_m,
+            basin_id=target_site.basin_id,
+        )
+    clay_frac = env.clay_fraction
+    sand_frac = env.sand_fraction
+    coarse_frac = env.coarse_rock_fragment_fraction
+    bulk_density = env.dry_bulk_density_g_cm3
+    ndvi_val = env.sentinel2_ndvi
+    canopy_val = env.gedi_canopy_height_m
+    aspect_val = env.aspect_deg
+    diurnal_lst_val = env.diurnal_lst_range_c
+    dist_road_val = env.distance_to_road_m
+    road_penalty_val = env.road_cut_penalty
+
+    # Run physics synthesis with real data
     raw = RawEarthObservationInputs(
         elevation_m=target_site.elevation_m,
         slope_deg=target_site.slope_deg,
+        aspect_deg=aspect_val,
         profile_curvature=target_site.profile_curvature,
         plan_curvature=target_site.profile_curvature * 0.5,
         upslope_contributing_area_m2=4500.0,
+        sentinel2_ndvi=ndvi_val,
+        gedi_canopy_height_m=canopy_val,
+        clay_fraction=clay_frac,
+        sand_fraction=sand_frac,
+        coarse_rock_fragment_fraction=coarse_frac,
+        dry_bulk_density_g_cm3=bulk_density,
         distance_to_fault_km=target_site.fault_distance_km,
+        diurnal_lst_range_c=diurnal_lst_val,
         imerg_rain_72h_mm=rain_72h,
         antecedent_rain_30d_api_mm=max(12.0, rain_72h * 1.5),
         pdd_c_days_7d=pdd_val,
         bedrock_pga_g=pga_g,
         insar_los_velocity_mm_month=2.5,
         snow_water_equivalent_mm=max(20.0, wind_surcharge * 100.0),
+        distance_to_road_m=dist_road_val,
+        road_cut_penalty=road_penalty_val,
     )
     syn = synthesize_physics_variables(raw)
     from app.ml.susceptibility import synthesize_point_physics_from_terrain
@@ -687,7 +931,7 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
         gamma=syn["gamma_kn_m3"],
         z=syn["z_m"],
         z_w=syn["z_w_m"],
-        beta_deg=target_site.slope_deg,
+        beta_deg=syn.get("effective_slope_deg", target_site.slope_deg),
         phi_prime_deg=syn["phi_prime_deg"],
         seismic_kh=syn["seismic_kh"],
         surface_surcharge_q_kpa=syn["surface_surcharge_q_kpa"] + wind_surcharge,
@@ -780,7 +1024,11 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
          "refresh_cadence": ("Weekly SBAS inversion (Measured)" if creep_measured
                              else "Every 6-12 Days (Modelled)"),
          "last_refresh_utc": now_utc - (now_utc % 1800)},
-        {"name": "Sentinel-2 NDVI Vegetation Canopy", "val": "0.32", "refresh_cadence": "Every 5 Days", "last_refresh_utc": now_utc - 120000},
+        {"name": "Sentinel-2 NDVI Vegetation Canopy", "val": f"{ndvi_val:.2f}", "refresh_cadence": "Every 5 Days", "last_refresh_utc": now_utc - 120000},
+        {"name": "NASA GEDI LiDAR Canopy Height", "val": f"{canopy_val:.1f} m", "refresh_cadence": "Spaceborne LiDAR", "last_refresh_utc": 1704067200},
+        {"name": "Soil Texture (Clay/Sand/Rock)", "val": f"{clay_frac*100:.0f}% / {sand_frac*100:.0f}% / {coarse_frac*100:.0f}%", "refresh_cadence": "Physiographic Map", "last_refresh_utc": 1704067200},
+        {"name": "Road Proximity & Cut Undercutting", "val": f"{dist_road_val:.0f} m (Rcut={road_penalty_val:.2f})", "refresh_cadence": "OpenStreetMap 2026", "last_refresh_utc": 1704067200},
+        {"name": "Stable Bedrock Reference Anchor", "val": f"{env.anchor_name} ({env.anchor_slope_deg:.1f}°)", "refresh_cadence": "Geomorphic Anchor", "last_refresh_utc": 1704067200},
         {"name": "Proglacial Lake Expansion Rate", "val": "0.0%", "refresh_cadence": "Every 5-6 Days", "last_refresh_utc": now_utc - 140000},
         {"name": "USGS Real-Time ShakeMap PGA", "val": f"{pga_g:.3f} g (M{seis_m:.1f})", "refresh_cadence": "Real-Time Streaming", "last_refresh_utc": now_utc - 60},
         {"name": "Copernicus 30m DEM Elevation", "val": f"{target_site.elevation_m:.0f} m", "refresh_cadence": "Static 30m Grid", "last_refresh_utc": 1704067200},
@@ -831,6 +1079,24 @@ def get_site_risk_analysis_report(site_id: str) -> Dict[str, object]:
             "insar_measured_mm_year": creep_input.get("measured_mm_year"),
             "insar_uncertainty_mm_year": creep_input.get("uncertainty_mm_year"),
             "insar_detection_limit_mm_year": creep_input.get("detection_limit_mm_year"),
+            "distance_to_road_m": round(dist_road_val, 1),
+            "road_cut_penalty": round(road_penalty_val, 3),
+            "effective_slope_deg": round(float(syn.get("effective_slope_deg", target_site.slope_deg)), 1),
+            "bedrock_anchor": {
+                "name": env.anchor_name,
+                "lat": env.anchor_lat,
+                "lon": env.anchor_lon,
+                "slope_deg": env.anchor_slope_deg,
+            },
+            "soil_texture": {
+                "clay_pct": round(clay_frac * 100, 1),
+                "sand_pct": round(sand_frac * 100, 1),
+                "rock_pct": round(coarse_frac * 100, 1),
+            },
+            "vegetation": {
+                "ndvi": round(ndvi_val, 2),
+                "canopy_height_m": round(canopy_val, 1),
+            },
             "active_triggers": triggers,
             "stability_status": "CRITICAL" if dyn_fs < 1.0 else "WATCH" if dyn_fs < 1.25 else "SAFE",
         },

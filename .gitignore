@@ -34,3 +34,9 @@ scratch/
 *.db
 backend/logs/
 .DS_Store
+
+# Measured valley-grid terrain cache. Rebuildable from public sources with
+# scripts/build_valley_grid.py (Copernicus DEM + SoilGrids + OSM + GEM faults) and runs
+# to hundreds of MB across the corridors, so it is derived data, not source.
+backend/data/valley_grid_terrain.json
+backend/data/valley_grid_terrain.json.tmp

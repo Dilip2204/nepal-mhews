@@ -198,9 +198,64 @@
             <button id="mapLayerTopoCanvas" class="px-2.5 py-1 rounded text-xs font-bold text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition">
               🗺️ 2D Shaded Relief
             </button>
+            <button id="btnToggleValleyGrid" title="Toggle 240m Valley FS Grid Overlay (NISAR-Aligned 3x3 Radar Patch)" class="px-2.5 py-1 rounded text-xs font-bold bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-600/40 transition flex items-center gap-1">
+              <span>🏔️</span> <span id="lblGridToggle">Valley Grid: ON</span>
+            </button>
             <button id="btnOpenGoogleEarth" title="Open selected site in Google Earth 3D" class="px-2 py-1 rounded text-xs font-bold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition flex items-center gap-1">
               🌍 Earth 3D ↗
             </button>
+          </div>
+        </div>
+
+        <!-- Valley Corridor Grid & Scenario Simulator Control Bar -->
+        <div id="valleyGridControlBar" class="flex flex-wrap items-center justify-between gap-2 p-2 rounded-lg bg-[var(--background)] border border-indigo-500/30 text-xs shadow-inner">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="font-bold flex items-center gap-1 text-indigo-400">
+              <span class="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+              <span>CORRIDOR:</span>
+            </span>
+            <select id="gridCorridorSelect" class="bg-[var(--card)] border border-[var(--border)] rounded px-2 py-1 font-semibold text-indigo-300 text-xs focus:outline-none focus:border-indigo-500">
+              <option value="langtang">Trishuli & Pasang Lhamu Highway (Dhunche, Syabrubesi, Hydro)</option>
+              <option value="budhi_gandaki">Budhi Gandaki & Barpak (Manaslu, Barpak, Philim, Arughat)</option>
+              <option value="kali_gandaki">Kali Gandaki & Siddhartha Highway (Jomsom, Marpha, Tatopani, Beni)</option>
+              <option value="karnali">Karnali Highway & Bheri Corridor (Kalikot, Manma, Dailekh, Surkhet)</option>
+              <option value="bagmati_narayani">Prithvi Highway & Bagmati (Mugling, Malekhu, Naubise, Kulekhani)</option>
+              <option value="sun_koshi">Araniko Highway & Sun Koshi (Bahrabise, Tatopani, Upper Tamakoshi)</option>
+              <option value="sapta_koshi_kanchenjunga">Arun-3 & Kanchenjunga (Khandbari, Num, Taplejung, Koshi Hwy)</option>
+            </select>
+
+            <!-- Slope Asset Exposure Category Filter -->
+            <div class="flex items-center gap-1.5 pl-2 border-l border-[var(--border)]">
+              <span class="text-[var(--muted-foreground)] font-medium">Slope Exposure:</span>
+              <select id="gridAssetFilter" class="bg-[var(--card)] border border-[var(--border)] rounded px-2 py-1 font-semibold text-amber-300 text-xs focus:outline-none focus:border-amber-500">
+                <option value="all">🌐 All Exposed Slopes (Settlements, Roads, Hydro, Gorges)</option>
+                <option value="settlement">🏘️ Human Settlements & Mountain Villages</option>
+                <option value="highway_roadcut">🛣️ Mountain Highways & Road Cuts</option>
+                <option value="hydro_infrastructure">⚡ Hydropower, Dams & Infrastructure</option>
+                <option value="river_gorge">🌊 River Gorge & Valley Flanks</option>
+                <option value="cryosphere_glacial">🏔️ High-Alpine Cryosphere Slopes</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Live Real-Time Raw Telemetry Badges (Zero Simulation / Zero Sliders) -->
+          <div class="flex flex-wrap items-center gap-2 font-mono text-[11px]">
+            <span class="flex items-center gap-1 px-2 py-0.5 rounded bg-blue-500/15 border border-blue-500/30 text-blue-300" title="Real-time NASA IMERG / Open-Meteo 72-hour precipitation recorded for this corridor">
+              <span>🌧️ Live 72h Rain:</span>
+              <strong id="gridLiveRainBadge" class="text-white">-- mm</strong>
+            </span>
+            <span class="flex items-center gap-1 px-2 py-0.5 rounded bg-sky-500/15 border border-sky-500/30 text-sky-300" title="30-day antecedent precipitation index sponge memory">
+              <span>💧 Antecedent API:</span>
+              <strong id="gridLiveApiBadge" class="text-white">-- mm</strong>
+            </span>
+            <span class="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300" title="USGS real-time ShakeMap horizontal seismic coefficient">
+              <span>⚡ USGS Seismic kh:</span>
+              <strong id="gridLiveKhBadge" class="text-white">0.010 g</strong>
+            </span>
+            <span class="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300" title="Live telemetry sync status from perpetual ingestion loop">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span id="gridLiveSyncBadge">LIVE TELEMETRY</span>
+            </span>
           </div>
         </div>
 
@@ -231,6 +286,22 @@
             </div>
             <div id="stCardType" class="text-[10px] text-cyan-400 font-medium pt-0.5 truncate">
               🏔️ Rock-Ice Avalanche / Glacier
+            </div>
+          </div>
+
+          <!-- Factor of Safety Continuous Gradient Scale Bar (Bottom-Left overlay) -->
+          <div id="fsGradientLegend" class="absolute bottom-12 left-3 bg-[var(--card)]/95 backdrop-blur border border-indigo-500/40 rounded-lg p-2 text-[10px] z-[1000] shadow-xl space-y-1 w-72 pointer-events-auto">
+            <div class="flex items-center justify-between gap-2 font-bold">
+              <span class="flex items-center gap-1 text-[var(--foreground)]"><span>🏔️</span> Valley Factor of Safety (FS):</span>
+              <span id="gridCellCountBadge" class="font-mono text-indigo-400 text-[10px]">Loading Grid...</span>
+            </div>
+            <!-- Continuous Gradient Bar -->
+            <div class="w-full h-2.5 rounded-full shadow-inner" style="background: linear-gradient(to right, #dc2626 0%, #ef4444 20%, #f97316 40%, #eab308 60%, #84cc16 80%, #10b981 100%);"></div>
+            <div class="flex items-center justify-between text-[9px] font-mono">
+              <span class="text-rose-400 font-bold">&lt; 1.0 (Critical)</span>
+              <span class="text-orange-400 font-semibold">1.08</span>
+              <span class="text-amber-400 font-semibold">1.18</span>
+              <span class="text-emerald-400 font-bold">&ge; 1.25 (Safe)</span>
             </div>
           </div>
 
@@ -376,6 +447,10 @@
                 <div>Friction (φ'): <strong id="repPhi">31.5°</strong></div>
                 <div>Water Table (zw): <strong id="repZw">0.30 m</strong></div>
                 <div>Soil Saturation: <strong id="repSat">18.5%</strong></div>
+                <div>Road Dist: <strong id="repRoadDist" class="text-sky-300">--</strong></div>
+                <div>Road Cut Pen: <strong id="repRoadCut" class="text-amber-400">--</strong></div>
+                <div>Canopy / NDVI: <strong id="repCanopy" class="text-emerald-300">--</strong></div>
+                <div>Bedrock Anchor: <strong id="repAnchor" class="text-purple-300">--</strong></div>
               </div>
             </div>
 
@@ -621,6 +696,11 @@
       currentSiteReport: null,
       autoRefreshCountdown: 30,
       activeLayer: "satellite", // "satellite" | "terrain" | "canvas"
+      valleyGridVisible: true,
+      selectedCorridorId: "langtang",
+      gridLiveTelemetry: null,
+      selectedAssetType: "all",
+      gridCells: [],
     };
 
     function formatRelativeTime(epochSec) {
@@ -676,6 +756,7 @@
         });
 
         tileLayers.satellite.addTo(leafletMap);
+        valleyGridLayerGroup = L.layerGroup().addTo(leafletMap);
         markersLayerGroup = L.layerGroup().addTo(leafletMap);
 
         leafletMap.on("moveend", () => {
@@ -875,6 +956,256 @@
       const url = `https://earth.google.com/web/@${lat},${lon},${elev}a,8000d,35y,0h,55t,0r`;
       window.open(url, "_blank");
     });
+
+    // ==========================================
+    // 1B. CONTIGUOUS VALLEY FACTOR OF SAFETY (FS) GRID OVERLAY
+    // ==========================================
+    let valleyGridLayerGroup = null;
+    let gridDebounceTimer = null;
+
+    function getAssetIcon(type) {
+      switch (type) {
+        case "SETTLEMENT": return "🏘️";
+        case "HIGHWAY_ROADCUT": return "🛣️";
+        case "HYDRO_INFRASTRUCTURE": return "⚡";
+        case "RIVER_GORGE": return "🌊";
+        case "CRYOSPHERE_GLACIAL": return "🏔️";
+        default: return "⛰️";
+      }
+    }
+
+    // The client-side valley-grid generator that used to live here has been removed.
+    // It built cells from Math.sin(i * 12.9898 + ...) * 43758.5453 - hash noise - with
+    // fault_distance_km hardcoded to 8.5, and returned them stamped
+    // provenance: "MEASURED_LIVE_RAW_TELEMETRY", is_live: true. When the API was down
+    // the map therefore kept drawing a full, confident, entirely invented grid that was
+    // indistinguishable from the real one. A warning system that cannot reach its
+    // backend has to say so; it must not improvise the hazard surface.
+
+    async function loadAndRenderValleyGrid(corridorId = null, assetType = null) {
+      if (!leafletMap) return;
+      if (!valleyGridLayerGroup) {
+        valleyGridLayerGroup = L.layerGroup().addTo(leafletMap);
+      }
+      
+      const cid = corridorId || state.selectedCorridorId || "langtang";
+      const atype = assetType !== null ? assetType : (state.selectedAssetType || "all");
+      state.selectedCorridorId = cid;
+      state.selectedAssetType = atype;
+
+      const badge = document.getElementById("gridCellCountBadge");
+      if (badge) badge.textContent = "Calculating Live FS Across Grid...";
+
+      try {
+        const assetParam = (atype && atype !== "all") ? `&asset_type=${encodeURIComponent(atype)}` : "";
+        // A real corridor holds tens of thousands of measured 240 m cells, so ask only
+        // for the ones on screen. The server returns the lowest-FS cells first and
+        // reports any truncation, so narrowing the viewport never hides a hazard that
+        // was being shown.
+        let bboxParam = "";
+        try {
+          const b = leafletMap.getBounds();
+          bboxParam = `&bbox=${b.getWest().toFixed(4)},${b.getSouth().toFixed(4)},`
+                    + `${b.getEast().toFixed(4)},${b.getNorth().toFixed(4)}`;
+        } catch (e) { bboxParam = ""; }
+        const res = await fetch(`/api/v1/grid/cells?corridor_id=${encodeURIComponent(cid)}${assetParam}${bboxParam}`);
+        if (!res.ok) throw new Error(`Grid fetch failed: HTTP ${res.status}`);
+        const data = await res.json();
+        
+        if (data.live_telemetry) {
+          state.gridLiveTelemetry = data.live_telemetry;
+          const rainEl = document.getElementById("gridLiveRainBadge");
+          const apiEl = document.getElementById("gridLiveApiBadge");
+          const khEl = document.getElementById("gridLiveKhBadge");
+          const syncEl = document.getElementById("gridLiveSyncBadge");
+          if (rainEl) rainEl.textContent = `${Number(data.live_telemetry.rainfall_72h_mm || 0).toFixed(1)} mm`;
+          if (apiEl) apiEl.textContent = `${Number(data.live_telemetry.api_30d_mm || 0).toFixed(1)} mm`;
+          if (khEl) khEl.textContent = `${Number(data.live_telemetry.seismic_kh || 0.01).toFixed(3)} g`;
+          if (syncEl) syncEl.textContent = `LIVE • ${formatRelativeTime(data.live_telemetry.timestamp_utc)}`;
+        }
+
+        state.gridCells = data.cells || [];
+        renderValleyGridOnMap(data);
+      } catch (err) {
+        // No fallback grid. If the physics engine cannot be reached, the map shows
+        // nothing and says why - an empty grid is honest, an invented one is not.
+        console.error("Valley grid unavailable:", err);
+        state.gridCells = [];
+        if (valleyGridLayerGroup) valleyGridLayerGroup.clearLayers();
+        const badge = document.getElementById("gridCellCountBadge");
+        if (badge) badge.textContent = "GRID UNAVAILABLE - physics engine unreachable";
+        const syncEl = document.getElementById("gridLiveSyncBadge");
+        if (syncEl) syncEl.textContent = "NO DATA";
+        ["gridLiveRainBadge", "gridLiveApiBadge", "gridLiveKhBadge"].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = "--";
+        });
+      }
+    }
+
+    function renderValleyGridOnMap(gridData) {
+      if (!valleyGridLayerGroup) return;
+      valleyGridLayerGroup.clearLayers();
+      if (!state.valleyGridVisible) return;
+
+      const cells = gridData.cells || [];
+      const badge = document.getElementById("gridCellCountBadge");
+      if (badge && gridData.summary) {
+        const sm = gridData.summary;
+        const redCount = (sm.alert_distribution || {}).RED || 0;
+        const redTag = redCount > 0 ? ` • 🔴 ${redCount} Critical` : "";
+        const ad = sm.asset_distribution || {};
+        const breakdown = Object.keys(ad).length > 1
+          ? ` (🏘️ ${ad.SETTLEMENT || 0} • 🛣️ ${ad.HIGHWAY_ROADCUT || 0} • 🏔️ ${ad.CRYOSPHERE_GLACIAL || 0})` : "";
+        // mean_fs is null when nothing is in view - say so rather than throw on toFixed.
+        const meanTag = (sm.mean_fs === null || sm.mean_fs === undefined)
+          ? `<span class="text-gray-400">no cells in view</span>`
+          : `Mean FS: <strong class="text-emerald-400">${sm.mean_fs.toFixed(2)}</strong>`;
+        // Truncation is stated, never silent: "2,500 of 21,247" reads very differently
+        // from "2,500 Cells", and the user has to be able to tell them apart.
+        const ofTotal = (sm.truncated && sm.cells_after_filters)
+          ? ` of ${sm.cells_after_filters.toLocaleString()} (worst first)` : "";
+        const noSoil = sm.cells_without_soil_excluded
+          ? ` • ${sm.cells_without_soil_excluded.toLocaleString()} rock/ice cells excluded (no soil profile)` : "";
+        badge.innerHTML = `<span class="text-indigo-400 font-bold">`
+          + `${cells.length.toLocaleString()} measured cells${ofTotal}${breakdown}</span>`
+          + ` • ${meanTag}${redTag}${noSoil}`;
+      }
+
+      cells.forEach(c => {
+        const [s, w, n, e] = c.bounds;
+        const rect = L.rectangle([[s, w], [n, e]], {
+          color: c.color_hex,
+          weight: 0.6,
+          fillColor: c.color_hex,
+          fillOpacity: 0.52,
+          pane: "overlayPane",
+        });
+
+        const icon = getAssetIcon(c.asset_type);
+        rect.bindTooltip(`
+          <div class="font-sans text-xs space-y-1">
+            <div class="flex items-center justify-between gap-2 border-b border-gray-600 pb-0.5 font-bold">
+              <span class="text-indigo-300 truncate max-w-[210px]">${icon} ${c.asset_name || c.cell_id}</span>
+              <span style="color:${c.color_hex}">FS: ${c.fs.toFixed(2)} (${c.alert_level})</span>
+            </div>
+            <div class="text-[11px] text-amber-300/90 font-medium leading-tight">
+              ${c.human_exposure_desc || "Exposed Mountain Slope"} • <span class="font-mono text-cyan-300">${c.human_asset_metric || ""}</span>
+            </div>
+            <div class="text-[11px] text-gray-200 pt-0.5 border-t border-gray-700/60">
+              Elev: ${c.elevation_m}m • Slope: ${c.slope_deg}° (Eff: ${c.effective_slope_deg}°)<br/>
+              Road: ${c.road_distance_m === null ? "none mapped within 1 km" : c.road_distance_m + "m"} (R_cut: ${(c.road_cut_penalty * 100).toFixed(0)}%) • River: ${c.distance_to_river_m === null ? "none mapped" : c.distance_to_river_m + "m"}<br/>
+              Water Saturation: ${(c.saturation_ratio * 100).toFixed(0)}% (zw: ${c.water_table_zw_m}m)
+            </div>
+          </div>
+        `, { direction: "top", sticky: true, opacity: 0.95 });
+
+        rect.on("click", () => {
+          inspectGridCell(c);
+        });
+
+        rect.addTo(valleyGridLayerGroup);
+      });
+    }
+
+    function inspectGridCell(c) {
+      const card = document.getElementById("floatingStationCard");
+      if (!card) return;
+
+      const nameEl = document.getElementById("stCardName");
+      const badgeEl = document.getElementById("stCardBadge");
+      const metaEl = document.getElementById("stCardMeta");
+      const fsEl = document.getElementById("stCardFs");
+      const creepEl = document.getElementById("stCardCreep");
+      const creepBasisEl = document.getElementById("stCardCreepBasis");
+      const rainEl = document.getElementById("stCardRain");
+      const zEl = document.getElementById("stCardZ");
+      const typeEl = document.getElementById("stCardType");
+
+      const icon = getAssetIcon(c.asset_type);
+      if (nameEl) nameEl.textContent = `${icon} ${c.asset_name || c.cell_id}`;
+      if (badgeEl) {
+        badgeEl.textContent = `${c.alert_level} (FS ${c.fs.toFixed(2)})`;
+        badgeEl.style.backgroundColor = `${c.color_hex}33`;
+        badgeEl.style.color = c.color_hex;
+      }
+      if (metaEl) {
+        metaEl.textContent = `${c.latitude.toFixed(4)}°N, ${c.longitude.toFixed(4)}°E • Elev: ${c.elevation_m}m • β: ${c.slope_deg}° (Eff: ${c.effective_slope_deg}°)`;
+      }
+      if (fsEl) {
+        fsEl.textContent = c.fs.toFixed(3);
+        fsEl.style.color = c.color_hex;
+      }
+      if (creepEl) {
+        creepEl.textContent = c.road_cut_penalty > 0.1 ? `Road Cut: ${c.road_distance_m}m` : (c.asset_type === "SETTLEMENT" ? "Settlement Slope" : `River: ${c.distance_to_river_m}m`);
+        creepEl.className = c.road_cut_penalty > 0.1 ? "text-amber-400 font-bold" : "text-sky-400 font-bold";
+      }
+      if (creepBasisEl) {
+        creepBasisEl.textContent = `Undercut Penalty: R_cut=${(c.road_cut_penalty * 100).toFixed(0)}% • Metric: ${c.human_asset_metric || 'Active'}`;
+      }
+      if (rainEl) {
+        const liveRain = (state.gridLiveTelemetry && state.gridLiveTelemetry.rainfall_72h_mm !== undefined)
+          ? state.gridLiveTelemetry.rainfall_72h_mm
+          : 0.0;
+        rainEl.textContent = `${liveRain.toFixed(1)} mm (Live 72h)`;
+      }
+      if (zEl) {
+        zEl.textContent = `${c.soil_depth_z_m}m (zw: ${c.water_table_zw_m}m)`;
+      }
+      if (typeEl) {
+        typeEl.textContent = `${icon} ${c.human_exposure_desc || c.asset_type} [${c.human_asset_metric || ''}]`;
+        typeEl.className = "text-amber-400 font-medium pt-0.5 truncate text-[10px]";
+      }
+    }
+
+    function toggleValleyGrid() {
+      state.valleyGridVisible = !state.valleyGridVisible;
+      const lbl = document.getElementById("lblGridToggle");
+      const btn = document.getElementById("btnToggleValleyGrid");
+      const legend = document.getElementById("fsGradientLegend");
+
+      if (state.valleyGridVisible) {
+        if (lbl) lbl.textContent = "Valley Grid: ON";
+        if (btn) btn.className = "px-2.5 py-1 rounded text-xs font-bold bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-600/40 transition flex items-center gap-1";
+        if (legend) legend.classList.remove("hidden");
+        loadAndRenderValleyGrid();
+      } else {
+        if (lbl) lbl.textContent = "Valley Grid: OFF";
+        if (btn) btn.className = "px-2.5 py-1 rounded text-xs font-bold bg-gray-700/30 text-gray-400 border border-gray-600/30 hover:bg-gray-700/50 transition flex items-center gap-1";
+        if (valleyGridLayerGroup) valleyGridLayerGroup.clearLayers();
+        if (legend) legend.classList.add("hidden");
+      }
+    }
+
+    // Grid event listeners
+    document.getElementById("btnToggleValleyGrid").addEventListener("click", toggleValleyGrid);
+    document.getElementById("gridCorridorSelect").addEventListener("change", (e) => {
+      const cid = e.target.value;
+      state.selectedCorridorId = cid;
+      
+      const centers = {
+        langtang: [28.215, 85.515, 11],
+        budhi_gandaki: [28.540, 84.630, 10],
+        kali_gandaki: [28.600, 83.750, 10],
+        karnali: [29.300, 82.150, 9],
+        bagmati_narayani: [27.750, 85.050, 10],
+        sun_koshi: [27.800, 86.000, 10],
+        sapta_koshi_kanchenjunga: [27.550, 87.550, 10]
+      };
+      if (centers[cid] && leafletMap) {
+        leafletMap.flyTo([centers[cid][0], centers[cid][1]], centers[cid][2]);
+      }
+      loadAndRenderValleyGrid(cid, state.selectedAssetType);
+    });
+
+    const assetFilterEl = document.getElementById("gridAssetFilter");
+    if (assetFilterEl) {
+      assetFilterEl.addEventListener("change", (e) => {
+        const atype = e.target.value;
+        state.selectedAssetType = atype;
+        loadAndRenderValleyGrid(state.selectedCorridorId, atype);
+      });
+    }
 
     // ==========================================
     // 2. CANVAS MAP ENGINE (2D SHADED RELIEF FALLBACK)
@@ -1280,6 +1611,12 @@
       document.getElementById("repPhi").textContent = `${risk.friction_phi_deg.toFixed(1)}°`;
       document.getElementById("repZw").textContent = `${risk.water_table_zw_m.toFixed(2)} m`;
       document.getElementById("repSat").textContent = `${risk.saturation_pct.toFixed(1)}%`;
+      document.getElementById("repRoadDist").textContent = risk.distance_to_road_m != null ? `${risk.distance_to_road_m.toFixed(0)} m` : "N/A";
+      document.getElementById("repRoadCut").textContent = risk.road_cut_penalty != null ? risk.road_cut_penalty.toFixed(2) : "0.00";
+      const veg = risk.vegetation || {};
+      document.getElementById("repCanopy").textContent = `${(veg.canopy_height_m || 0).toFixed(1)}m / ${(veg.ndvi || 0).toFixed(2)}`;
+      const anc = risk.bedrock_anchor || {};
+      document.getElementById("repAnchor").textContent = anc.name ? `${anc.name} (${(anc.slope_deg || 5).toFixed(0)}°)` : "Generic";
 
       const alertPill = document.getElementById("repAlertPill");
       alertPill.textContent = risk.alert_level;
@@ -1767,6 +2104,7 @@
     // Startup
     renderSiteReport(INITIAL_REPORT);
     initLeafletMap();
+    loadAndRenderValleyGrid("langtang");
     loadSites();
     fetchSiteReport(state.selectedSiteId);
     loadGroundTruthFeedback();
