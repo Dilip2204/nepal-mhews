@@ -41,3 +41,6 @@ backend/logs/
 backend/data/valley_grid_terrain.json
 backend/data/valley_grid_terrain.json.tmp
 backend/data/valley_grid_terrain/
+
+# Reproducible upstream fault-source downloads (re-fetched by app/ingestion/fault_traces.py)
+backend/data/fault_sources/
